@@ -84,6 +84,13 @@ function buildOutline(): Vec2[] {
 }
 const OUTLINE = buildOutline();
 
+// Movement boundary = the OUTER edge of the Périphérique ring road, so you can
+// drive its full width instead of being walled off at the centerline.
+const OUTLINE_OUTER = OUTLINE.map((p) => {
+  const l = Math.hypot(p.x, p.z) || 1;
+  return { x: p.x + (p.x / l) * (PERIPH_WIDTH / 2), z: p.z + (p.z / l) * (PERIPH_WIDTH / 2) };
+});
+
 // Île de la Cité: dry land splitting the Seine, with Notre-Dame on it.
 const ISLAND = { cx: N.notredame.x, cz: N.notredame.z, rx: 46, rz: 15 };
 
@@ -575,7 +582,7 @@ export function buildParis(): CityData {
     river: { points: SEINE_POINTS, width: SEINE_WIDTH },
     parks: PARKS,
     trees: buildTrees(),
-    boundary: OUTLINE,
+    boundary: OUTLINE_OUTER, // clamp at the Périph's outer edge
     island: ISLAND,
     bridges: buildBridges(),
     spawns: [
