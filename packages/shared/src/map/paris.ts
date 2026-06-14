@@ -209,6 +209,7 @@ const ROADS = buildRoads();
 
 // Seine: curving W->E band through the south-centre, past the île (Notre-Dame).
 const SEINE_POINTS: Vec2[] = [
+  { x: -1000, z: 250 }, // flows in from beyond the Périphérique (west)
   { x: -520, z: 130 },
   { x: -340, z: 80 },
   { x: -160, z: 55 },
@@ -216,6 +217,7 @@ const SEINE_POINTS: Vec2[] = [
   { x: 150, z: 70 },
   { x: 320, z: 95 },
   { x: 500, z: 200 },
+  { x: 1000, z: 430 }, // flows out past the boundary (east)
 ];
 const SEINE_WIDTH = 46;
 

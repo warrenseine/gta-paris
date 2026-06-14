@@ -1088,7 +1088,7 @@ export class ParisRoom extends Room<GameState> {
    * NEAR_CAR for a while, roll a fresh traffic car onto the closest street.
    */
   private ensureNearbyCars(tickNo: number) {
-    const NEAR_CAR = 80;
+    const NEAR_CAR = 150; // only dispatch when no car is even within view
     const MAX_TRAFFIC = 30; // cap so dispatched cars don't pile up forever
     if (this.countNpc(NPC_CAR) >= MAX_TRAFFIC) return;
 
@@ -1105,7 +1105,9 @@ export class ParisRoom extends Room<GameState> {
       }
       if (nearest <= NEAR_CAR) continue; // a car is already close enough
 
-      const spot = this.nearestRoadSpot(ps.x, ps.z, 14, 140);
+      // Spawn beyond the interest radius so the car is never seen popping in;
+      // it only appears once the player walks toward it (or it drives in).
+      const spot = this.nearestRoadSpot(ps.x, ps.z, INTEREST_RADIUS + 10, 280);
       if (!spot) {
         this.carDispatch.set(pid, tickNo + 1 * TICK_RATE); // retry soon
         continue;
