@@ -25,10 +25,19 @@ export class CityRenderer {
     const isl = city.island;
     if (!isl) return;
     const geo = new THREE.CircleGeometry(1, 28);
-    const m = new THREE.Mesh(geo, flat(COLORS.ground));
+    // Own material (not the shared cache) with polygon offset so it wins the
+    // depth test against the Seine ribbon without z-fighting at the edges.
+    const mat = new THREE.MeshLambertMaterial({
+      color: COLORS.ground,
+      flatShading: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    const m = new THREE.Mesh(geo, mat);
     m.scale.set(isl.rx, isl.rz, 1);
     m.rotation.x = -Math.PI / 2;
-    m.position.set(isl.cx, 0.18, isl.cz); // just above the Seine ribbon (0.14)
+    m.position.set(isl.cx, 0.16, isl.cz); // just above the Seine ribbon (0.14)
     this.group.add(m);
   }
 

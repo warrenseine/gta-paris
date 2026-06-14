@@ -19,6 +19,24 @@ function distToSeg(x: number, z: number, a: Vec2, b: Vec2): number {
   return Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
 }
 
+/** Deck-top height (m) if (x,z) is on a bridge, else 0. Visual only — the sim is 2D. */
+export function bridgeHeight(
+  x: number,
+  z: number,
+  bridges: { x: number; z: number; rotationY: number; length: number; width: number }[],
+): number {
+  for (const b of bridges) {
+    const cos = Math.cos(b.rotationY);
+    const sin = Math.sin(b.rotationY);
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const lx = cos * dx - sin * dz;
+    const lz = sin * dx + cos * dz;
+    if (Math.abs(lx) <= b.length / 2 && Math.abs(lz) <= b.width / 2) return 1.0; // deck top
+  }
+  return 0;
+}
+
 /** True if (x,z) is over open Seine water — not on a bridge deck or the island. */
 export function overWater(x: number, z: number, w: WaterField): boolean {
   if (w.island) {

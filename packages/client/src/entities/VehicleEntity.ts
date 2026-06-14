@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Interpolation } from '../net/Interpolation.js';
 import { makeCarMesh, makePoliceCarMesh, makeTankMesh } from './views.js';
+import { bridgeY } from './bridgeLevel.js';
 import { COLORS } from '../render/materials.js';
 
 // A networked car: interpolated unless locally driven (then Game drives the mesh).
@@ -17,7 +18,7 @@ export class VehicleEntity {
   update(now: number) {
     const s = this.interp.sample(now);
     if (!s) return;
-    this.mesh.position.set(s.x, 0, s.z);
+    this.mesh.position.set(s.x, bridgeY(s.x, s.z), s.z);
     this.mesh.rotation.y = s.rotY;
   }
 

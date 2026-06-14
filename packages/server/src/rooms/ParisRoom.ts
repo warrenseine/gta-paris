@@ -982,8 +982,10 @@ export class ParisRoom extends Room<GameState> {
     n.fireCd -= DT;
     if (d < COP_FIRE_RANGE && n.fireCd <= 0) {
       n.fireCd = 0.8;
-      // Cops aren't crack shots — they miss roughly half their shots.
-      const miss = Math.random() < 0.5;
+      // Cops aren't crack shots — and the further the target, the worse their
+      // aim (close ~15% miss, at the edge of range ~85%).
+      const missChance = Math.max(0.15, Math.min(0.85, 0.15 + 0.7 * (d / COP_FIRE_RANGE)));
+      const miss = Math.random() < missChance;
       let tx = ps.x;
       let tz = ps.z;
       if (miss) {

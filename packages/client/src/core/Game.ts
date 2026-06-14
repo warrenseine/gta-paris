@@ -25,6 +25,7 @@ import { Effects } from '../render/effects.js';
 import { COLORS } from '../render/materials.js';
 import { InputManager } from '../input/InputManager.js';
 import { makePlayerMesh, animateWalk, animateSwim } from '../entities/views.js';
+import { setBridges, bridgeY } from '../entities/bridgeLevel.js';
 import { HUD } from '../ui/HUD.js';
 import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
@@ -76,6 +77,7 @@ export class Game {
         island: this.city.island,
       },
     };
+    setBridges(this.city.bridges); // entities raise onto bridge decks
     this.renderer = new Renderer(container);
     this.cam = new FollowCamera(this.renderer.aspect);
     // Keep the void beyond the Périph off-screen: clamp the focus to the city
@@ -335,9 +337,10 @@ export class Game {
       camX = this.carPred.renderXAt(alpha);
       camZ = this.carPred.renderZAt(alpha);
       const rot = this.carPred.renderRotAt(alpha);
+      const deckY = bridgeY(camX, camZ);
       const ve = this.entities.vehicles.get(this.drivingId);
       if (ve) {
-        ve.mesh.position.set(camX, 0, camZ);
+        ve.mesh.position.set(camX, deckY, camZ);
         ve.mesh.rotation.y = rot;
       }
       lookX = Math.sin(rot); // camera leads toward car heading
@@ -350,7 +353,7 @@ export class Game {
         const lx = Math.cos(rot); // car's left side (perpendicular to heading)
         const lz = -Math.sin(rot);
         // Sit at the window; only the upper body shows above the car, leaning out.
-        this.playerMesh.position.set(camX + lx * 1.05, 0.55, camZ + lz * 1.05);
+        this.playerMesh.position.set(camX + lx * 1.05, 0.55 + deckY, camZ + lz * 1.05);
         this.playerMesh.rotation.set(-0.25, Math.atan2(aim.x, aim.z), 0.3); // lean out + face aim
         if (legs) {
           legs.lLeg.visible = false;
@@ -382,7 +385,7 @@ export class Game {
         this.playerMesh.rotation.x = -1.3; // lie prone in the water
         animateSwim(this.playerMesh, frameDt);
       } else {
-        this.playerMesh.position.set(camX, 0, camZ);
+        this.playerMesh.position.set(camX, bridgeY(camX, camZ), camZ);
         this.playerMesh.rotation.x = 0;
         const sp = Math.hypot(this.footPred.state.vx, this.footPred.state.vz);
         animateWalk(this.playerMesh, sp, frameDt);
