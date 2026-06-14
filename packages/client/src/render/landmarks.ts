@@ -101,7 +101,9 @@ function louvre(): THREE.Group {
   // Each wing is a stone block capped by a mansard roof slab.
   const wing = (w: number, h: number, d: number, x: number, z: number) => {
     g.add(box(w, h, d, STONE, x, h / 2, z));
-    g.add(box(w + 1, 3, d + 1, ROOF, x, h + 1.5, z));
+    // Roof slab sunk so its base sits inside the wall (no coplanar faces = no
+    // z-fighting); eaves overhang slightly.
+    g.add(box(w + 1.5, 3, d + 1.5, ROOF, x, h, z));
   };
   wing(16, 16, 58, 22, 0); // east wing (back of the U)
   wing(52, 15, 15, -3, -22); // north wing

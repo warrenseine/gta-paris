@@ -160,6 +160,7 @@ export class ParisRoom extends Room<GameState> {
   private dispatchCounter = 0;
   private trafficCounter = 0;
   private carDispatch = new Map<string, number>(); // playerId -> next tick we may pop a car
+  private carTouching = new Set<string>(); // vehicleIds currently in wall contact (edge-trigger crashes)
   // playerId -> wanted level (1..5) + tick the heat expires.
   private stars = new Map<string, { n: number; until: number }>();
 
@@ -692,11 +693,16 @@ export class ParisRoom extends Room<GameState> {
             const carWorld = veh?.kind === 2 ? { ...world, maxSpeed: TANK_MAX_SPEED } : world;
             const next = stepCar(car, input, DT, carWorld);
             this.cars.set(ps.vehicleId, next);
-            // Crash damage only on an actual building impact, proportional to the
-            // speed driven into the wall, accumulating until the car explodes.
-            // (No false hits from turning, water, or being nudged while parked.)
+            // Crash damage once per impact (rising edge), proportional to the
+            // speed driven into the wall — so grinding along a building doesn't
+            // rack up damage every tick and blow the car up in seconds.
             if (next.wallImpact && next.wallImpact > 9) {
-              this.damageCar(ps.vehicleId, (next.wallImpact - 8) * 2.0, id);
+              if (!this.carTouching.has(ps.vehicleId)) {
+                this.damageCar(ps.vehicleId, (next.wallImpact - 8) * 2.0, id);
+                this.carTouching.add(ps.vehicleId);
+              }
+            } else {
+              this.carTouching.delete(ps.vehicleId);
             }
             sim.foot.x = next.x;
             sim.foot.z = next.z;
