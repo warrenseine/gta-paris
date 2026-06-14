@@ -86,8 +86,32 @@ function walkablePoint(city: CityData): { x: number; z: number } {
   return { x: 0, z: 0 };
 }
 
+// A road is safe for traffic if it never crosses the Seine except at a bridge.
+function roadTrafficSafe(city: CityData, road: { points: Vec2[] }): boolean {
+  for (let s = 0; s < road.points.length - 1; s++) {
+    const a = road.points[s];
+    const b = road.points[s + 1];
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.max(2, Math.ceil(len / 8));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      if (!onSeine(city, x, z, 1)) continue;
+      const bridged = city.bridges.some(
+        (br) => Math.hypot(x - br.x, z - br.z) < Math.max(br.length, br.width) / 2 + 8,
+      );
+      if (!bridged) return false;
+    }
+  }
+  return true;
+}
+
 export function spawnNpcs(city: CityData): NpcSimState[] {
   const npcs: NpcSimState[] = [];
+  // Roads cars may drive (don't ford the river off-bridge).
+  const safe = city.roads.filter((r) => roadTrafficSafe(city, r));
+  const driveRoads = safe.length ? safe : city.roads;
 
   for (let i = 0; i < PED_COUNT; i++) {
     const p = walkablePoint(city);
@@ -115,10 +139,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
     });
   }
 
-  // Traffic: each car oscillates along one boulevard polyline.
-  const roads = city.roads;
+  // Traffic: each car oscillates along one (water-safe) boulevard polyline.
   for (let i = 0; i < TRAFFIC_COUNT; i++) {
-    const road = roads[i % roads.length];
+    const road = driveRoads[i % driveRoads.length];
     const path = road.points.map((p) => ({ x: p.x, z: p.z }));
     const startSeg = Math.floor(rand(0, Math.max(1, path.length - 1)));
     const a = path[startSeg];
@@ -147,7 +170,7 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
 
   // Police cars roaming the boulevards.
   for (let i = 0; i < POLICE_COUNT; i++) {
-    const road = city.roads[(i * 5 + 2) % city.roads.length];
+    const road = driveRoads[(i * 5 + 2) % driveRoads.length];
     const path = road.points.map((p) => ({ x: p.x, z: p.z }));
     const a = path[0];
     npcs.push({
