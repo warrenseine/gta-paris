@@ -44,7 +44,7 @@ const N = {
   bastille: { x: 250, z: 65 },
   nation: { x: 380, z: 120 },
   garedunord: { x: 70, z: -210 },
-  garedelyon: { x: 305, z: 140 },
+  garedelyon: { x: 320, z: 180 }, // south bank of the Seine (like the real Gare de Lyon)
   sacrecoeur: { x: 45, z: -310 },
   buttes: { x: 320, z: -240 },
   perelachaise: { x: 390, z: -30 },
@@ -161,7 +161,7 @@ function buildRoads(): Seg[] {
 
   // Radial avenues out to the nearest Périphérique vertex (so it's reachable).
   const outer: (keyof typeof N)[] = [
-    'etoile', 'monceau', 'buttes', 'perelachaise', 'nation', 'garedelyon',
+    'etoile', 'monceau', 'buttes', 'perelachaise',
     'montparnasse', 'champdemars', 'trocadero', 'sacrecoeur', 'garedunord', 'bastille',
   ];
   for (const k of outer) {
@@ -205,9 +205,9 @@ const SEINE_POINTS: Vec2[] = [
   { x: -160, z: 55 },
   { x: 30, z: 55 },
   { x: 150, z: 70 },
-  { x: 320, z: 95 },
-  { x: 500, z: 200 },
-  { x: 1000, z: 430 }, // flows out past the boundary (east)
+  { x: 300, z: 140 }, // dips south of the Bastille/Nation cluster (they stay north)
+  { x: 520, z: 210 },
+  { x: 1000, z: 330 }, // flows out past the boundary (south-east)
 ];
 const SEINE_WIDTH = 46;
 
@@ -390,6 +390,24 @@ function buildBuildings(): BuildingDef[] {
       });
     }
   }
+
+  // Place des Vosges: a uniform building frame (the famous arcaded pavilions)
+  // ringing the garden on all four sides.
+  const pv = PARKS.find((p) => p.name === 'Place des Vosges');
+  if (pv) {
+    const gap = 3;
+    const d = 9; // frame depth (half = 4.5)
+    const out = pv.hw + gap + d / 2; // centre offset to the N/S rows
+    const sideOut = pv.hd + gap + d / 2;
+    const span = pv.hw + gap + d; // N/S rows reach over the corners
+    const frame: BuildingDef[] = [
+      { cx: pv.cx, cz: pv.cz - sideOut, hw: span, hd: d / 2 }, // north
+      { cx: pv.cx, cz: pv.cz + sideOut, hw: span, hd: d / 2 }, // south
+      { cx: pv.cx + out, cz: pv.cz, hw: d / 2, hd: pv.hd + gap }, // east
+      { cx: pv.cx - out, cz: pv.cz, hw: d / 2, hd: pv.hd + gap }, // west
+    ].map((f) => ({ ...f, id: id++, height: 24, rotationY: 0, paletteId: 1 }));
+    buildings.push(...frame);
+  }
   return buildings;
 }
 
@@ -399,6 +417,17 @@ function buildTrees(): Vec2[] {
   const rng = mulberry32(0x7e5);
   const pts: Vec2[] = [];
   for (const p of PARKS) {
+    // Place des Vosges: a formal garden — a dense grid of trees with the central
+    // cross paths kept clear.
+    if (p.name === 'Place des Vosges') {
+      for (let gx = -p.hw + 3; gx <= p.hw - 3; gx += 4.5) {
+        for (let gz = -p.hd + 3; gz <= p.hd - 3; gz += 4.5) {
+          if (Math.abs(gx) < 4 || Math.abs(gz) < 4) continue; // keep the cross paths open
+          pts.push({ x: p.cx + gx, z: p.cz + gz });
+        }
+      }
+      continue;
+    }
     const n = Math.floor((p.hw * p.hd) / 260);
     for (let i = 0; i < n; i++) {
       pts.push({ x: p.cx + (rng() - 0.5) * 2 * (p.hw - 3), z: p.cz + (rng() - 0.5) * 2 * (p.hd - 3) });
