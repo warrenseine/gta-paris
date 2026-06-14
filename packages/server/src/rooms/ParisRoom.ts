@@ -1082,8 +1082,8 @@ export class ParisRoom extends Room<GameState> {
     const dz = ps.z - n.z;
     const d = Math.hypot(dx, dz) || 1;
     n.rotY = Math.atan2(dx, dz);
-    const FIRE = 70;
-    if (d > FIRE * 0.8) {
+    const FIRE = 30; // close range only — the tank has to roll right up to you
+    if (d > FIRE * 0.85) {
       const sp = 7; // slow and menacing
       const r = resolveAgainstBuildings({ x: n.x + (dx / d) * sp * DT, z: n.z + (dz / d) * sp * DT, r: CAR.radius }, this.city.buildings);
       n.x = r.x;
@@ -1092,8 +1092,17 @@ export class ParisRoom extends Room<GameState> {
     n.fireCd -= DT;
     if (d < FIRE && n.fireCd <= 0) {
       n.fireCd = 2.4;
-      this.explodeAt(ps.x, ps.z, n.id);
-      this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx: ps.x, tz: ps.z, hit: true, weaponId: SHELL.weaponId });
+      // 30% miss: land the shell clear of the player so the blast doesn't reach.
+      let tx = ps.x;
+      let tz = ps.z;
+      if (Math.random() < 0.3) {
+        const a = Math.random() * Math.PI * 2;
+        const off = SHELL.radius + 4 + Math.random() * 5;
+        tx = ps.x + Math.cos(a) * off;
+        tz = ps.z + Math.sin(a) * off;
+      }
+      this.explodeAt(tx, tz, n.id);
+      this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx, tz, hit: true, weaponId: SHELL.weaponId });
     }
   }
 
