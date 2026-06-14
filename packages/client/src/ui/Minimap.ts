@@ -35,6 +35,8 @@ export class Minimap {
   private ctx: CanvasRenderingContext2D;
   private wrap: HTMLDivElement;
   private expanded = false;
+  private toggled = false; // M key
+  private held = false; // L2 (hold)
   private scaleBase: number;
   private city: CityData;
 
@@ -57,9 +59,24 @@ export class Minimap {
     document.body.appendChild(this.wrap);
   }
 
+  /** M key: flip the sticky full-map state. */
   toggle() {
-    this.expanded = !this.expanded;
-    if (this.expanded) {
+    this.toggled = !this.toggled;
+    this.apply();
+  }
+
+  /** L2: show the full map only while held. */
+  setHeld(held: boolean) {
+    if (held === this.held) return;
+    this.held = held;
+    this.apply();
+  }
+
+  private apply() {
+    const expanded = this.toggled || this.held;
+    if (expanded === this.expanded) return;
+    this.expanded = expanded;
+    if (expanded) {
       const s = Math.min(window.innerWidth, window.innerHeight) * 0.82;
       this.wrap.style.top = '50%';
       this.wrap.style.left = '50%';

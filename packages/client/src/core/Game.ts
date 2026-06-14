@@ -175,6 +175,7 @@ export class Game {
     this.fireCd -= dt;
 
     if (cmd.mapToggle) this.minimap.toggle();
+    this.minimap.setHeld(cmd.mapHold);
 
     if (!this.alive) {
       this.effects.update(dt);

@@ -24,7 +24,6 @@ export class InputManager {
   /** Latched aim direction — kept when the right stick is released. */
   private lastAimX = 0;
   private lastAimZ = 1;
-  private prevL2 = false;
 
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -75,6 +74,7 @@ export class InputManager {
     let handbrake = false;
     let sprint = false;
     let mapToggle = false;
+    let mapHold = false;
 
     const pad = this.pollGamepad();
     if (pad) {
@@ -98,12 +98,8 @@ export class InputManager {
       if (pad.buttons[3]?.pressed) enterExit = true; // Y (top)
       if (pad.buttons[1]?.pressed) handbrake = true; // B
       if (pad.buttons[10]?.pressed) sprint = true; // L3
-      // L2 toggles the full map (edge-detected).
-      const l2 = (pad.buttons[6]?.value ?? 0) > 0.4 || (pad.buttons[6]?.pressed ?? false);
-      if (l2 && !this.prevL2) mapToggle = true;
-      this.prevL2 = l2;
-    } else {
-      this.prevL2 = false;
+      // L2 held = show the full map (released = hide).
+      if ((pad.buttons[6]?.value ?? 0) > 0.4 || (pad.buttons[6]?.pressed ?? false)) mapHold = true;
     }
 
     // Keyboard movement (additive; overrides if pressed).
@@ -136,6 +132,7 @@ export class InputManager {
     cmd.enterExit = enterExit;
     cmd.fire = fire;
     cmd.mapToggle = mapToggle;
+    cmd.mapHold = mapHold;
 
     // --- Aim --- (latched: keep the last orientation when no fresh aim input)
     if (hasStickAim) {
