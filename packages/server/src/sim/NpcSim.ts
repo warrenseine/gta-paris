@@ -20,6 +20,9 @@ export interface NpcSimState {
   z: number;
   rotY: number;
   colorId: number;
+  hp: number;
+  dead: boolean;
+  respawnAt: number;
   // ped
   tx: number;
   tz: number;
@@ -30,6 +33,9 @@ export interface NpcSimState {
   dir: number; // +1 / -1 along the path
   speed: number;
 }
+
+export const PED_HP = 20;
+export const CAR_HP = 70;
 
 const PED_COUNT = 150;
 const TRAFFIC_COUNT = 26;
@@ -66,6 +72,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       z: p.z,
       rotY: 0,
       colorId: Math.floor(rand(0, 5)),
+      hp: PED_HP,
+      dead: false,
+      respawnAt: 0,
       tx: t.x,
       tz: t.z,
       repathAt: 0,
@@ -90,6 +99,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       z: a.z,
       rotY: 0,
       colorId: Math.floor(rand(0, 5)),
+      hp: CAR_HP,
+      dead: false,
+      respawnAt: 0,
       tx: 0,
       tz: 0,
       repathAt: 0,
@@ -106,6 +118,25 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
 export function stepNpc(n: NpcSimState, dt: number, city: CityData, tick: number) {
   if (n.kind === NPC_PED) stepPed(n, dt, city, tick);
   else stepCarNpc(n, dt);
+}
+
+/** Bring a killed NPC back to life at a fresh spot. */
+export function reviveNpc(n: NpcSimState, city: CityData) {
+  n.dead = false;
+  n.hp = n.kind === NPC_CAR ? CAR_HP : PED_HP;
+  if (n.kind === NPC_PED) {
+    const p = walkablePoint(city);
+    n.x = p.x;
+    n.z = p.z;
+    const t = walkablePoint(city);
+    n.tx = t.x;
+    n.tz = t.z;
+  } else {
+    n.seg = 0;
+    n.x = n.path[0]?.x ?? 0;
+    n.z = n.path[0]?.z ?? 0;
+    n.speed = 12;
+  }
 }
 
 function stepPed(n: NpcSimState, dt: number, city: CityData, tick: number) {

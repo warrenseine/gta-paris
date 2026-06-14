@@ -30,7 +30,7 @@ export const CAMERA = {
   pitchDeg: 62, // tilt from horizontal
   distance: 95, // meters from target
   fov: 45,
-  followLerp: 8, // critically-damped follow factor
+  followLerp: 5, // lower = smoother / floatier camera
 };
 
 /** Interest management. */

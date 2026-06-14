@@ -6,7 +6,6 @@ import {
   stepCar,
   weapon,
   emptyInput,
-  PLAYER,
   MSG,
   type CityData,
   type FootState,
@@ -48,6 +47,8 @@ export class Game {
 
   private audio = new AudioManager();
   private local: LocalPlayerFields | null = null;
+  private lastAimX = 0;
+  private lastAimZ = 1;
   private fireCd = 0;
   private deathTime = 0;
   private scoreboardOpen = false;
@@ -158,6 +159,8 @@ export class Game {
 
   private step(dt: number) {
     const cmd = this.input.sample(this.cam.camera, this.selfX, this.selfZ);
+    this.lastAimX = cmd.aimX;
+    this.lastAimZ = cmd.aimZ;
     this.fireCd -= dt;
 
     if (!this.alive) {
@@ -184,11 +187,15 @@ export class Game {
     const ox = this.selfX + cmd.aimX * 0.8;
     const oz = this.selfZ + cmd.aimZ * 0.8;
 
-    // Cosmetic local tracer toward nearest remote player or full range.
+    // Cosmetic local tracer toward nearest player/NPC or full range.
     const targets: HitTarget[] = [];
     for (const [id, rp] of this.entities.remotes) {
       if (!rp.mesh.visible) continue;
       targets.push({ id, x: rp.mesh.position.x, z: rp.mesh.position.z, r: 0.6 });
+    }
+    for (const [id, ne] of this.entities.npcs) {
+      if (!ne.mesh.visible) continue;
+      targets.push({ id, x: ne.mesh.position.x, z: ne.mesh.position.z, r: 0.7 });
     }
     const hit = castRay(ox, oz, cmd.aimX, cmd.aimZ, w.range, targets, this.city.buildings);
     const tx = hit ? hit.x : ox + cmd.aimX * w.range;
@@ -214,8 +221,6 @@ export class Game {
   }
 
   private render(frameDt: number) {
-    let laX = 0;
-    let laZ = 0;
     const dead = !this.alive;
 
     if (this.drivingId && this.carPred) {
@@ -225,24 +230,32 @@ export class Game {
         ve.mesh.position.set(this.carPred.renderX, 0, this.carPred.renderZ);
         ve.mesh.rotation.y = this.carPred.state.rotY;
       }
-      const dir = Math.sign(this.carPred.state.speed);
-      laX = Math.sin(this.carPred.state.rotY) * dir;
-      laZ = Math.cos(this.carPred.state.rotY) * dir;
       this.playerMesh.visible = false;
     } else {
       this.footPred.smooth(frameDt);
       this.playerMesh.position.set(this.footPred.renderX, 0, this.footPred.renderZ);
       this.playerMesh.rotation.y = this.footPred.state.rotY;
       this.playerMesh.visible = !dead;
-      laX = this.footPred.state.vx / PLAYER.walkSpeed;
-      laZ = this.footPred.state.vz / PLAYER.walkSpeed;
     }
 
     this.entities.update(performance.now(), this.drivingId);
-    this.cam.update(this.selfX, this.selfZ, frameDt, laX, laZ);
+    // Camera leads toward where you aim/look, not where you move.
+    this.cam.update(this.selfX, this.selfZ, frameDt, this.lastAimX, this.lastAimZ);
 
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);
+  }
+
+  /** Distance to the nearest driver-less car (for the enter prompt). */
+  private nearestEnterableCar(): number {
+    let best = Infinity;
+    for (const [id, v] of this.entities.vehicleStates) {
+      if (v.driverId) continue;
+      const ve = this.entities.vehicles.get(id);
+      if (!ve) continue;
+      best = Math.min(best, Math.hypot(ve.mesh.position.x - this.selfX, ve.mesh.position.z - this.selfZ));
+    }
+    return best;
   }
 
   private updateHud(dead: boolean) {
@@ -251,13 +264,16 @@ export class Game {
     const online = this.entities.remotes.size + 1;
     const respawnIn = Math.max(0, 3 - (performance.now() - this.deathTime) / 1000);
 
+    const nearCar = !this.drivingId && !dead && this.nearestEnterableCar() < 10;
     this.hud.set({
       health: l?.health ?? 100,
       weapon: this.drivingId ? 'Driving' : w.name,
       ammo: this.drivingId ? '' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
       hint: this.drivingId
-        ? `WASD drive · F/A exit · Tab scores · ${online} online`
-        : `WASD move · aim · shoot · F/A car · Tab scores · ${online} online`,
+        ? `WASD drive · F / A exit · Tab scores · ${online} online`
+        : nearCar
+          ? `▶ Press F / A to enter car`
+          : `WASD move · aim · shoot · Tab scores · ${online} online`,
       kills: l?.kills ?? 0,
       deaths: l?.deaths ?? 0,
       dead,

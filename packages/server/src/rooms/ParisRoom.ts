@@ -20,7 +20,7 @@ import {
   type FireMessage,
   type HitTarget,
 } from '@gta/shared';
-import { spawnNpcs, stepNpc, type NpcSimState } from '../sim/NpcSim.js';
+import { spawnNpcs, stepNpc, reviveNpc, NPC_CAR, type NpcSimState } from '../sim/NpcSim.js';
 
 export class PlayerState extends Schema {
   @type('string') id = '';
@@ -118,6 +118,18 @@ export class ParisRoom extends Room<GameState> {
   private cars = new Map<string, CarState>();
   private pickupRespawn = new Map<string, number>();
   private npcSims: NpcSimState[] = [];
+  private npcById = new Map<string, NpcSimState>();
+
+  private addNpcState(n: NpcSimState) {
+    const ns = new NpcState();
+    ns.id = n.id;
+    ns.x = n.x;
+    ns.z = n.z;
+    ns.rotY = n.rotY;
+    ns.kind = n.kind;
+    ns.colorId = n.colorId;
+    this.state.npcs.set(n.id, ns);
+  }
 
   onCreate() {
     this.setState(new GameState());
@@ -138,14 +150,8 @@ export class ParisRoom extends Room<GameState> {
     // Ambient NPCs (peds + traffic).
     this.npcSims = spawnNpcs(this.city);
     for (const n of this.npcSims) {
-      const ns = new NpcState();
-      ns.id = n.id;
-      ns.x = n.x;
-      ns.z = n.z;
-      ns.rotY = n.rotY;
-      ns.kind = n.kind;
-      ns.colorId = n.colorId;
-      this.state.npcs.set(n.id, ns);
+      this.npcById.set(n.id, n);
+      this.addNpcState(n);
     }
 
     this.city.pickups.forEach((pk, i) => {
@@ -225,7 +231,7 @@ export class ParisRoom extends Room<GameState> {
       return;
     }
     let bestId = '';
-    let bestD = 5.5;
+    let bestD = 10;
     for (const [vid, v] of this.state.vehicles) {
       if (v.driverId) continue;
       const d = Math.hypot(v.x - sim.foot.x, v.z - sim.foot.z);
@@ -265,6 +271,11 @@ export class ParisRoom extends Room<GameState> {
       const pos = s ? rewound(s.history, rewindTick) : { x: p.x, z: p.z };
       targets.push({ id, x: pos.x, z: pos.z, r: 0.6 });
     }
+    // NPCs are shootable too (no lag comp needed — they move slowly).
+    for (const n of this.npcSims) {
+      if (n.dead) continue;
+      targets.push({ id: n.id, x: n.x, z: n.z, r: n.kind === NPC_CAR ? 1.7 : 0.7 });
+    }
 
     let hitTargetId: string | null = null;
     let hx = 0;
@@ -293,6 +304,18 @@ export class ParisRoom extends Room<GameState> {
   }
 
   private applyDamage(killerId: string, victimId: string, dmg: number) {
+    // NPC target? Kill it (no score), respawn later.
+    const npc = this.npcById.get(victimId);
+    if (npc) {
+      if (npc.dead) return;
+      npc.hp -= dmg;
+      if (npc.hp <= 0) {
+        npc.dead = true;
+        npc.respawnAt = this.state.serverTick + (npc.kind === NPC_CAR ? 12 * TICK_RATE : 6 * TICK_RATE);
+        this.state.npcs.delete(npc.id);
+      }
+      return;
+    }
     const victim = this.state.players.get(victimId);
     if (!victim || !victim.alive) return;
     victim.health -= dmg;
@@ -414,6 +437,13 @@ export class ParisRoom extends Room<GameState> {
 
     // Ambient NPCs.
     for (const n of this.npcSims) {
+      if (n.dead) {
+        if (tickNo >= n.respawnAt) {
+          reviveNpc(n, this.city);
+          this.addNpcState(n);
+        }
+        continue;
+      }
       stepNpc(n, DT, this.city, tickNo);
       const ns = this.state.npcs.get(n.id);
       if (ns) {
@@ -423,9 +453,75 @@ export class ParisRoom extends Room<GameState> {
       }
     }
 
+    this.resolveCarCollisions();
     this.updatePickups(tickNo);
     this.updateInterest();
     this.state.serverTick++;
+  }
+
+  /** Server-side car-vs-car separation (player vehicles + NPC traffic). */
+  private resolveCarCollisions() {
+    const R = 2.0;
+    const min = R * 2;
+    interface C { x: number; z: number; set: (x: number, z: number) => void }
+    const list: C[] = [];
+
+    for (const [vid, v] of this.state.vehicles) {
+      const car = this.cars.get(vid);
+      if (!car) continue;
+      list.push({
+        x: car.x,
+        z: car.z,
+        set: (x, z) => {
+          car.x = x;
+          car.z = z;
+          v.x = x;
+          v.z = z;
+        },
+      });
+    }
+    for (const n of this.npcSims) {
+      if (n.dead || n.kind !== NPC_CAR) continue;
+      list.push({
+        x: n.x,
+        z: n.z,
+        set: (x, z) => {
+          n.x = x;
+          n.z = z;
+          const ns = this.state.npcs.get(n.id);
+          if (ns) {
+            ns.x = x;
+            ns.z = z;
+          }
+        },
+      });
+    }
+
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        let dx = b.x - a.x;
+        let dz = b.z - a.z;
+        let d = Math.hypot(dx, dz);
+        if (d === 0) {
+          dx = 1;
+          dz = 0;
+          d = 1;
+        }
+        if (d < min) {
+          const push = (min - d) / 2;
+          dx /= d;
+          dz /= d;
+          a.x -= dx * push;
+          a.z -= dz * push;
+          b.x += dx * push;
+          b.z += dz * push;
+          a.set(a.x, a.z);
+          b.set(b.x, b.z);
+        }
+      }
+    }
   }
 
   private updatePickups(tickNo: number) {

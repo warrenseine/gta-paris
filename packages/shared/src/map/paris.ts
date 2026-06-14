@@ -163,10 +163,14 @@ export function buildParis(): CityData {
       { x: -250, z: 230, weaponId: 2 },
       { x: 210, z: 40, weaponId: 3 },
     ],
+    // A car parked ~6m from every spawn, plus a couple extra.
     vehicles: [
-      { x: 12, z: -8, rotationY: 0, colorId: 0 },
-      { x: -20, z: 14, rotationY: Math.PI, colorId: 1 },
-      { x: -240, z: 215, rotationY: 0, colorId: 2 },
+      { x: 4, z: -16, rotationY: 0, colorId: 0 },
+      { x: 34, z: 16, rotationY: Math.PI, colorId: 1 },
+      { x: -256, z: 204, rotationY: 0, colorId: 2 },
+      { x: 204, z: 56, rotationY: Math.PI / 2, colorId: 3 },
+      { x: 64, z: -324, rotationY: 0, colorId: 4 },
+      { x: 220, z: 30, rotationY: Math.PI / 2, colorId: 0 },
     ],
   };
 }
