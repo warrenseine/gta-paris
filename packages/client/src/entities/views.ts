@@ -62,6 +62,20 @@ export function animateWalk(group: THREE.Object3D, speed: number, dt: number) {
   w.rArm.rotation.x = swing;
 }
 
+// Swim: lie prone (caller tilts the body) and paddle arms + flutter legs.
+export function animateSwim(group: THREE.Object3D, dt: number) {
+  const w = group.userData.walk as
+    | { lLeg: THREE.Mesh; rLeg: THREE.Mesh; lArm: THREE.Mesh; rArm: THREE.Mesh; phase: number }
+    | undefined;
+  if (!w) return;
+  w.phase += dt * 7;
+  const s = Math.sin(w.phase);
+  w.lArm.rotation.x = -1.5 + s * 0.9; // alternating overhead strokes
+  w.rArm.rotation.x = -1.5 - s * 0.9;
+  w.lLeg.rotation.x = s * 0.5; // flutter kick
+  w.rLeg.rotation.x = -s * 0.5;
+}
+
 export function makePlayerMesh(color: number): THREE.Group {
   return makeHuman(color);
 }

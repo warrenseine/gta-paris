@@ -5,6 +5,7 @@ export * from './map/types.js';
 export * from './map/paris.js';
 export * from './sim/weapons.js';
 export * from './sim/collision.js';
+export * from './sim/water.js';
 export * from './sim/movement.js';
 export * from './sim/vehicle.js';
 export * from './sim/hitscan.js';

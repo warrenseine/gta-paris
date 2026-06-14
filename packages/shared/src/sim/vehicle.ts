@@ -6,6 +6,7 @@ import type { BuildingDef } from '../map/types.js';
 import type { Vec2 } from '../math.js';
 import { clamp } from '../math.js';
 import { resolveAgainstBuildings, resolveAgainstTrees, clampToBounds } from './collision.js';
+import { overWater, type WaterField } from './water.js';
 
 export interface CarState {
   x: number;
@@ -28,6 +29,7 @@ export interface CarWorld {
   buildings: BuildingDef[];
   trees?: Vec2[];
   boundary?: Vec2[];
+  water?: WaterField; // the Seine — driving in kills the engine (car sinks)
 }
 
 const TREE_RADIUS = 1.1;
@@ -57,6 +59,9 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
     const align = Math.cos(diff); // 1 aligned .. -1 opposite
     speed += CAR.enginePower * il * align * (align < 0 ? 1.6 : 1) * dt;
   }
+
+  // In the Seine: the engine drowns — the car bogs to a stop and can't drive out.
+  if (world.water && overWater(s.x, s.z, world.water)) speed *= Math.max(0, 1 - 7 * dt);
 
   if (input.handbrake) speed *= Math.max(0, 1 - 5 * dt);
   speed -= speed * CAR.drag * dt;

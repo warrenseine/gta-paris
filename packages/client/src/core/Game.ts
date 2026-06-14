@@ -22,7 +22,7 @@ import { CityRenderer } from '../render/CityRenderer.js';
 import { Effects } from '../render/effects.js';
 import { COLORS } from '../render/materials.js';
 import { InputManager } from '../input/InputManager.js';
-import { makePlayerMesh, animateWalk } from '../entities/views.js';
+import { makePlayerMesh, animateWalk, animateSwim } from '../entities/views.js';
 import { HUD } from '../ui/HUD.js';
 import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
@@ -62,9 +62,28 @@ export class Game {
 
   constructor(container: HTMLElement, private conn: Connection) {
     this.city = buildParis();
-    this.world = { buildings: this.city.buildings, trees: this.city.trees, boundary: this.city.boundary };
+    this.world = {
+      buildings: this.city.buildings,
+      trees: this.city.trees,
+      boundary: this.city.boundary,
+      water: {
+        seine: this.city.river.points,
+        seineWidth: this.city.river.width,
+        bridges: this.city.bridges,
+        island: this.city.island,
+      },
+    };
     this.renderer = new Renderer(container);
     this.cam = new FollowCamera(this.renderer.aspect);
+    // Keep the void beyond the Périph off-screen: clamp the focus to the city
+    // half-extents minus a margin (camera trails the player a touch at the rim).
+    let bx = 0;
+    let bz = 0;
+    for (const p of this.city.boundary) {
+      bx = Math.max(bx, Math.abs(p.x));
+      bz = Math.max(bz, Math.abs(p.z));
+    }
+    this.cam.setBounds(bx - 70, bz - 70);
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.effects = new Effects(this.renderer.scene);
     this.hud = new HUD();
@@ -296,11 +315,18 @@ export class Game {
       this.footPred.smooth(frameDt);
       camX = this.footPred.renderXAt(alpha);
       camZ = this.footPred.renderZAt(alpha);
-      this.playerMesh.position.set(camX, 0, camZ);
       this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
       this.playerMesh.visible = !dead;
-      const sp = Math.hypot(this.footPred.state.vx, this.footPred.state.vz);
-      animateWalk(this.playerMesh, sp, frameDt);
+      if (this.footPred.state.swimming) {
+        this.playerMesh.position.set(camX, -0.55, camZ); // mostly submerged
+        this.playerMesh.rotation.x = -1.3; // lie prone in the water
+        animateSwim(this.playerMesh, frameDt);
+      } else {
+        this.playerMesh.position.set(camX, 0, camZ);
+        this.playerMesh.rotation.x = 0;
+        const sp = Math.hypot(this.footPred.state.vx, this.footPred.state.vz);
+        animateWalk(this.playerMesh, sp, frameDt);
+      }
     }
 
     if (dead) {

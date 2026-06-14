@@ -34,7 +34,7 @@ const N = {
   palais: { x: 25, z: -40 },
   chatelet: { x: 120, z: 35 },
   hoteldeville: { x: 160, z: 45 },
-  notredame: { x: 150, z: 80 },
+  notredame: { x: 150, z: 72 }, // on the île de la Cité (river centerline)
   pantheon: { x: 110, z: 175 },
   luxembourg: { x: 55, z: 180 },
   montparnasse: { x: -25, z: 265 },
@@ -90,6 +90,9 @@ function buildOutline(): Vec2[] {
   return pts;
 }
 const OUTLINE = buildOutline();
+
+// Île de la Cité: dry land splitting the Seine, with Notre-Dame on it.
+const ISLAND = { cx: N.notredame.x, cz: N.notredame.z, rx: 46, rz: 15 };
 
 // Avenues between named places (real-ish angles). Width: grand axes wider.
 const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
@@ -180,6 +183,18 @@ function buildRoads(): Seg[] {
     segs.push({ from: { ...N[k] }, to: { ...OUTLINE[bi] }, width: 12 });
   }
 
+  // Place de l'Étoile: a roundabout ring around the Arc de Triomphe.
+  const raR = 34;
+  const raN = 12;
+  const ra: Vec2[] = [];
+  for (let i = 0; i < raN; i++) {
+    const a = (i / raN) * Math.PI * 2;
+    ra.push({ x: N.etoile.x + Math.cos(a) * raR, z: N.etoile.z + Math.sin(a) * raR });
+  }
+  for (let i = 0; i < raN; i++) {
+    segs.push({ from: { ...ra[i] }, to: { ...ra[(i + 1) % raN] }, width: 9 });
+  }
+
   // The Périphérique ring (a closed loop of road).
   for (let i = 0; i < OUTLINE.length; i++) {
     segs.push({ from: { ...OUTLINE[i] }, to: { ...OUTLINE[(i + 1) % OUTLINE.length] }, width: PERIPH_WIDTH });
@@ -201,7 +216,7 @@ const SEINE_POINTS: Vec2[] = [
 const SEINE_WIDTH = 46;
 
 const PARKS: ParkDef[] = [
-  { name: 'Jardin des Tuileries', cx: -35, cz: -15, hw: 70, hd: 18 },
+  { name: 'Jardin des Tuileries', cx: -30, cz: 16, hw: 62, hd: 13 }, // south of rue de Rivoli
   { name: 'Champ de Mars', cx: -300, cz: 165, hw: 28, hd: 70 },
   { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
   { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
@@ -247,31 +262,40 @@ function buildBridges() {
       if (!hit) continue;
       const dx = r.to.x - r.from.x;
       const dz = r.to.z - r.from.z;
+      const rl = Math.hypot(dx, dz) || 1;
+      // Span the water diagonally: a shallow crossing needs a longer deck so the
+      // ends land on dry banks (the deck must reach the road, not float mid-river).
+      const sx = SEINE_POINTS[i + 1].x - SEINE_POINTS[i].x;
+      const sz = SEINE_POINTS[i + 1].z - SEINE_POINTS[i].z;
+      const sl = Math.hypot(sx, sz) || 1;
+      const sinT = Math.abs((dx / rl) * (sz / sl) - (dz / rl) * (sx / sl));
+      const span = SEINE_WIDTH / Math.max(0.35, sinT);
       out.push({
         x: hit.x,
         z: hit.z,
         rotationY: Math.atan2(-dz, dx), // align the deck's long (X) axis with the road
-        length: SEINE_WIDTH + 20,
-        width: Math.max(r.width + 6, 16),
+        length: Math.min(150, span + 30), // +30 → ~15m onto each bank
+        width: Math.max(r.width + 8, 18),
       });
     }
   }
   return out;
 }
 
-// Landmarks: position + key. y raised for the ones on higher ground.
-const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number }[] = [
+// Landmarks: position + key. `off` nudges the building off a road junction so it
+// sits beside the street, not on it (the node stays put for road connectivity).
+const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number; off?: Vec2; rotationY?: number }[] = [
   { key: 'arcdetriomphe', at: N.etoile },
   { key: 'eiffel', at: N.eiffel },
   { key: 'louvre', at: N.louvre },
   { key: 'notredame', at: N.notredame },
   { key: 'sacrecoeur', at: N.sacrecoeur, y: 22 },
   { key: 'concorde', at: N.concorde },
-  { key: 'opera', at: N.opera },
+  { key: 'opera', at: N.opera, off: { x: 6, z: -28 } },
   { key: 'pantheon', at: N.pantheon },
   { key: 'invalides', at: N.invalides },
-  { key: 'madeleine', at: N.madeleine },
-  { key: 'grandpalais', at: N.grandpalais },
+  { key: 'madeleine', at: N.madeleine, off: { x: 0, z: -26 } },
+  { key: 'grandpalais', at: N.grandpalais, off: { x: -8, z: -26 } },
   { key: 'montparnasse', at: N.montparnasse },
 ];
 
@@ -357,8 +381,8 @@ function buildLandmarks(): LandmarkDef[] {
   return LANDMARKS.map((l, id) => ({
     id,
     key: l.key,
-    position: { x: l.at.x, y: l.y ?? 0, z: l.at.z },
-    rotationY: 0,
+    position: { x: l.at.x + (l.off?.x ?? 0), y: l.y ?? 0, z: l.at.z + (l.off?.z ?? 0) },
+    rotationY: l.rotationY ?? 0,
     scale: 1,
   }));
 }
@@ -379,6 +403,7 @@ export function buildParis(): CityData {
     parks: PARKS,
     trees: buildTrees(),
     boundary: OUTLINE,
+    island: ISLAND,
     bridges: buildBridges(),
     spawns: [
       { x: N.concorde.x, z: N.concorde.z - 14, rotationY: 0 },

@@ -18,9 +18,17 @@ export class FollowCamera {
   private occTarget = 0;
   private zoom = 0; // eased 0..1 — L1 zoom-out
   private zoomTarget = 0;
+  private boundX = Infinity; // focus clamp half-extents (keeps the void off-screen)
+  private boundZ = Infinity;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.5, 2000);
+  }
+
+  /** Limit how far the focus can drift so we never frame much beyond the Périph. */
+  setBounds(hx: number, hz: number) {
+    this.boundX = hx;
+    this.boundZ = hz;
   }
 
   resize(aspect: number) {
@@ -53,7 +61,19 @@ export class FollowCamera {
     this.leadZ += (aimZ * AIM_LEAD - this.leadZ) * ak;
 
     // Smooth the focus point toward the player too (no instantaneous snapping).
-    const desiredFocus = new THREE.Vector3(tx + this.leadX, 0, tz + this.leadZ);
+    // Clamp it inside an ellipse so the camera never frames the empty suburbs
+    // beyond the Périphérique (the player can still walk to the very edge).
+    let fx = tx + this.leadX;
+    let fz = tz + this.leadZ;
+    if (Number.isFinite(this.boundX)) {
+      const e = (fx / this.boundX) ** 2 + (fz / this.boundZ) ** 2;
+      if (e > 1) {
+        const s = 1 / Math.sqrt(e);
+        fx *= s;
+        fz *= s;
+      }
+    }
+    const desiredFocus = new THREE.Vector3(fx, 0, fz);
     if (!this.seeded) {
       this.focus.copy(desiredFocus);
       this.current.set(desiredFocus.x, vert, desiredFocus.z + horiz);

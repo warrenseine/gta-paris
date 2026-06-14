@@ -15,9 +15,21 @@ export class CityRenderer {
     this.buildParks(city);
     this.buildRoads(city);
     this.buildRiver(city); // after roads so the Seine sits on top where streets cross it
+    this.buildIsland(city); // île de la Cité, above the river
     this.buildBuildings(city);
     this.buildTrees(city);
     this.buildLandmarks(city);
+  }
+
+  private buildIsland(city: CityData) {
+    const isl = city.island;
+    if (!isl) return;
+    const geo = new THREE.CircleGeometry(1, 28);
+    const m = new THREE.Mesh(geo, flat(COLORS.ground));
+    m.scale.set(isl.rx, isl.rz, 1);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(isl.cx, 0.18, isl.cz); // just above the Seine ribbon (0.14)
+    this.group.add(m);
   }
 
   private buildGround(city: CityData) {

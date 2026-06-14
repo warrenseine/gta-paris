@@ -6,6 +6,7 @@ import { PLAYER } from '../constants.js';
 import type { BuildingDef } from '../map/types.js';
 import { clamp } from '../math.js';
 import { resolveAgainstBuildings, clampToBounds } from './collision.js';
+import { overWater, type WaterField } from './water.js';
 
 export interface FootState {
   x: number;
@@ -14,12 +15,14 @@ export interface FootState {
   vz: number;
   rotY: number; // facing (movement or aim)
   stamina: number; // 0..PLAYER.maxStamina; gates sprinting
+  swimming?: boolean; // true while in the Seine (drives the swim animation)
 }
 
 export interface MoveWorld {
   buildings: BuildingDef[];
   trees?: { x: number; z: number }[]; // used by vehicles only
   boundary?: { x: number; z: number }[]; // Paris outline (Périphérique)
+  water?: WaterField; // the Seine (slows you to a swim)
 }
 
 /** Advance an on-foot player one fixed step. Pure: returns a new state. */
@@ -27,11 +30,12 @@ export function stepFoot(s: FootState, input: InputCommand, dt: number, world: M
   const mlen = Math.hypot(input.moveX, input.moveZ);
   // Sprint is gated by stamina: needs a minimum to start, drains while used,
   // regenerates otherwise. Deterministic so client + server agree.
+  const swimming = !!(world.water && overWater(s.x, s.z, world.water));
   let stamina = s.stamina ?? PLAYER.maxStamina;
-  const sprinting = input.sprint && mlen > 1e-3 && stamina > PLAYER.staminaSprintMin;
+  const sprinting = !swimming && input.sprint && mlen > 1e-3 && stamina > PLAYER.staminaSprintMin;
   if (sprinting) stamina = Math.max(0, stamina - PLAYER.staminaDrain * dt);
   else stamina = Math.min(PLAYER.maxStamina, stamina + PLAYER.staminaRegen * dt);
-  const target = sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+  const target = swimming ? PLAYER.swimSpeed : sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
   // Desired velocity from move intent.
   let dvx = 0;
   let dvz = 0;
@@ -72,5 +76,5 @@ export function stepFoot(s: FootState, input: InputCommand, dt: number, world: M
     rotY = Math.atan2(vx, vz);
   }
 
-  return { x, z, vx, vz, rotY, stamina };
+  return { x, z, vx, vz, rotY, stamina, swimming };
 }

@@ -48,19 +48,37 @@ function frustum(rBottom: number, rTop: number, h: number, color: number, y: num
 
 function eiffel(): THREE.Group {
   const g = new THREE.Group();
-  // Tapering tower: wide arched base -> narrowing sections -> spire.
-  g.add(frustum(30, 18, 44, ZINC, 22)); // base (legs splay out at the bottom)
-  g.add(box(40, 3, 40, ZINC, 0, 44)); // first platform
-  g.add(frustum(13, 7, 60, ZINC, 76)); // mid
+  // Four distinct splayed legs that lean inward and meet under the platform.
+  const legLen = 50;
+  const corner = 14;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(5.5, legLen, 5.5), flat(ZINC));
+      leg.geometry.translate(0, legLen / 2, 0); // pivot at the foot
+      leg.position.set(sx * corner, 0, sz * corner);
+      leg.rotation.z = sx * 0.22; // lean the top toward the centre
+      leg.rotation.x = -sz * 0.22;
+      g.add(leg);
+    }
+  }
+  // Arch panels spanning between the legs (open underneath = the iconic arch).
+  for (const [ax, az, ry] of [
+    [0, corner, 0],
+    [0, -corner, 0],
+    [corner, 0, Math.PI / 2],
+    [-corner, 0, Math.PI / 2],
+  ] as const) {
+    const arch = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 2), flat(0x6a7079));
+    arch.position.set(ax, 22, az);
+    arch.rotation.y = ry;
+    g.add(arch);
+  }
+  g.add(box(40, 4, 40, ZINC, 0, 46)); // first platform
+  g.add(frustum(15, 8, 56, ZINC, 76)); // mid section
   g.add(box(20, 3, 20, ZINC, 0, 106)); // second platform
   g.add(frustum(6, 2, 70, ZINC, 142)); // upper
   g.add(cyl(1.6, 24, ZINC, 0, 189, 0, 6)); // mast
   g.add(cone(1.4, 8, ZINC, 0, 205, 0, 6)); // tip
-  // Arch hint under the base.
-  g.add(box(8, 24, 8, 0x6a7079, -13, 12, 0));
-  g.add(box(8, 24, 8, 0x6a7079, 13, 12, 0));
-  g.add(box(8, 24, 8, 0x6a7079, 0, 12, -13));
-  g.add(box(8, 24, 8, 0x6a7079, 0, 12, 13));
   return g;
 }
 
@@ -78,28 +96,30 @@ function arcdetriomphe(): THREE.Group {
 
 function louvre(): THREE.Group {
   const g = new THREE.Group();
-  // U-shaped palace opening south toward the courtyard (smaller, sensible scale).
-  g.add(box(58, 18, 16, STONE, 0, 9, -22)); // north wing
-  g.add(box(16, 18, 46, STONE, -21, 9, 2)); // west wing
-  g.add(box(16, 18, 46, STONE, 21, 9, 2)); // east wing
+  // U-shaped palace opening WEST toward the Tuileries; closed wing on the east.
+  g.add(box(16, 18, 58, STONE, 22, 9, 0)); // east wing (back of the U)
+  g.add(box(46, 18, 16, STONE, 0, 9, -21)); // north wing
+  g.add(box(46, 18, 16, STONE, 0, 9, 21)); // south wing
   const pyr = new THREE.Mesh(new THREE.ConeGeometry(7, 11, 4), flat(0x9fd0e0));
   pyr.rotation.y = Math.PI / 4;
-  pyr.position.set(0, 5.5, 4); // glass pyramid in the courtyard
+  pyr.position.set(-6, 5.5, 0); // glass pyramid in the courtyard, toward the opening
   g.add(pyr);
   return g;
 }
 
 function notredame(): THREE.Group {
   const g = new THREE.Group();
-  g.add(box(30, 26, 64, STONE, 0, 13, 6)); // nave
-  g.add(box(15, 50, 15, STONE, -9, 25, -32)); // west towers
-  g.add(box(15, 50, 15, STONE, 9, 25, -32));
-  g.add(box(13, 13, 2, 0x6a6258, 0, 30, -39)); // rose window
-  g.add(cone(4, 28, ZINC, 0, 44, 8, 8)); // spire
-  // Flying-buttress hint.
-  for (const z of [-6, 12, 26]) {
-    g.add(box(3, 14, 3, STONE, -18, 8, z));
-    g.add(box(3, 14, 3, STONE, 18, 8, z));
+  // Smaller cathedral, long axis E-W; west front (towers) at the -x end so it
+  // fits lengthwise on the île de la Cité.
+  g.add(box(46, 18, 16, STONE, 0, 9, 0)); // nave
+  g.add(box(9, 30, 7, STONE, -20, 15, -4)); // west towers
+  g.add(box(9, 30, 7, STONE, -20, 15, 4));
+  g.add(box(7, 9, 2, 0x6a6258, -25, 16, 0)); // rose window on the west facade
+  g.add(cone(3, 18, ZINC, 8, 27, 0, 8)); // spire over the crossing
+  // Flying-buttress hints along the long sides.
+  for (const x of [-2, 8, 16]) {
+    g.add(box(2.5, 10, 2.5, STONE, x, 6, -10));
+    g.add(box(2.5, 10, 2.5, STONE, x, 6, 10));
   }
   return g;
 }

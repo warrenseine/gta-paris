@@ -7,6 +7,7 @@ import {
   emptyInput,
   castRay,
   resolveAgainstBuildings,
+  overWater,
   weapon,
   TICK_RATE,
   DT,
@@ -16,6 +17,7 @@ import {
   INTEREST_RADIUS,
   MAX_REWIND_MS,
   type CityData,
+  type WaterField,
   type FootState,
   type CarState,
   type InputCommand,
@@ -139,6 +141,7 @@ const CRASH_SPEED = 18; // only hard, fast impacts damage the car
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
   private city!: CityData;
+  private water!: WaterField;
   private sims = new Map<string, Sim>();
   private cars = new Map<string, CarState>();
   private pickupRespawn = new Map<string, number>();
@@ -166,6 +169,12 @@ export class ParisRoom extends Room<GameState> {
   onCreate() {
     this.setState(new GameState());
     this.city = buildParis();
+    this.water = {
+      seine: this.city.river.points,
+      seineWidth: this.city.river.width,
+      bridges: this.city.bridges,
+      island: this.city.island,
+    };
 
     this.vehicleSpawns = this.city.vehicles.map((v) => ({ ...v }));
     this.city.vehicles.forEach((v, i) => {
@@ -544,7 +553,12 @@ export class ParisRoom extends Room<GameState> {
 
   private tick() {
     const tickNo = this.state.serverTick;
-    const world = { buildings: this.city.buildings, trees: this.city.trees, boundary: this.city.boundary };
+    const world = {
+      buildings: this.city.buildings,
+      trees: this.city.trees,
+      boundary: this.city.boundary,
+      water: this.water,
+    };
 
     for (const [id, sim] of this.sims) {
       const ps = this.state.players.get(id);
@@ -580,10 +594,16 @@ export class ParisRoom extends Room<GameState> {
             sim.foot.x = next.x;
             sim.foot.z = next.z;
             sim.foot.rotY = next.rotY;
+            // Sinking in the Seine: the driver drowns unless they bail out.
+            if (overWater(next.x, next.z, this.water)) {
+              ps.health -= PLAYER.drownDps * DT;
+              if (ps.health <= 0) this.killPlayer(id, id);
+            }
           }
         } else {
           sim.foot = stepFoot(sim.foot, input, DT, world);
         }
+        if (!ps.alive) break; // drowned this step
         lastSeq = input.seq;
       }
       sim.queue.length = 0;

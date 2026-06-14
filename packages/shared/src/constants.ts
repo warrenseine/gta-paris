@@ -25,12 +25,14 @@ export const PLAYER = {
   height: 1.8,
   walkSpeed: 6, // m/s
   sprintSpeed: 10,
+  swimSpeed: 2.8, // slow flailing crawl while in the Seine
   accel: 60, // m/s^2 (snappy)
   maxHealth: 100,
   maxStamina: 100,
   staminaDrain: 14, // per second while sprinting (~7s of sprint)
-  staminaRegen: 11, // per second when not sprinting
+  staminaRegen: 24, // per second when not sprinting (quick recovery)
   staminaSprintMin: 5, // need at least this to start sprinting
+  drownDps: 18, // health/s lost while trapped in a sinking car
 };
 
 /** Camera rig. High + steep so the city reads top-down and buildings don't tower. */

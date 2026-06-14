@@ -90,6 +90,8 @@ export interface CityData {
   trees: Vec2[];
   /** Paris outline polygon (the Périphérique). Movement is clamped inside it. */
   boundary: Vec2[];
+  /** Île de la Cité: dry land (ellipse) splitting the Seine under Notre-Dame. */
+  island?: { cx: number; cz: number; rx: number; rz: number };
   bridges: { x: number; z: number; rotationY: number; length: number; width: number }[];
   spawns: SpawnPoint[];
   pickups: PickupSpawn[];
