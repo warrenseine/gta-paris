@@ -33,6 +33,7 @@ export interface VehicleFields {
   driverId: string;
   colorId: number;
   kind: number; // 0 = car, 1 = police, 2 = tank
+  hp: number; // 0..100 %
 }
 
 // Bridges Colyseus room state -> Three.js scene for remote players and all
@@ -106,6 +107,7 @@ export class EntityManager {
           driverId: v.driverId,
           colorId: v.colorId,
           kind: v.kind,
+          hp: v.hp,
         });
         ve.interp.push(v.x, v.z, v.rotY, performance.now());
       };

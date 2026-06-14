@@ -59,6 +59,7 @@ export class Game {
   private aimZ = 1;
   private fireCd = 0;
   private lastShot = 0;
+  private smokeCd = 0;
   private lockedPos: { x: number; z: number } | null = null;
   private visor: HTMLDivElement;
   private tmpVec = new THREE.Vector3();
@@ -407,6 +408,17 @@ export class Game {
 
     this.entities.update(performance.now(), this.drivingId);
     this.cityRenderer.update(frameDt);
+    // Damaged cars (<50% hp) trail smoke.
+    this.smokeCd -= frameDt;
+    if (this.smokeCd <= 0) {
+      this.smokeCd = 0.25;
+      for (const [id, v] of this.entities.vehicleStates) {
+        if (v.kind === 2 || v.hp >= 50) continue; // tanks don't smoke; only hurt cars
+        const px = id === this.drivingId ? camX : v.x;
+        const pz = id === this.drivingId ? camZ : v.z;
+        if (Math.hypot(px - this.selfX, pz - this.selfZ) < 160) this.effects.smoke(px, pz);
+      }
+    }
     this.cam.update(camX, camZ, frameDt, lookX, lookZ);
     this.cam.setOccluded(this.occluded(camX, camZ));
     this.renderer.setFocus(camX, camZ); // keep shadows centred on the player

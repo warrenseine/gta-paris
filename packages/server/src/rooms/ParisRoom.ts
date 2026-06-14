@@ -69,6 +69,7 @@ export class VehicleState extends Schema {
   @type('number') speed = 0;
   @type('number') colorId = 0;
   @type('uint8') kind = 0; // 0 = car, 1 = police, 2 = tank
+  @type('uint8') hp = 100; // 0..100 % — drives the damage-smoke effect
   @type('string') driverId = '';
 }
 
@@ -141,7 +142,7 @@ const STAR_DECAY_TICKS = 22 * TICK_RATE; // time to shed ONE star while evading
 const POLICE_SIGHT = 130; // police notice gunfire within this range
 const COP_FIRE_RANGE = 45;
 const COP_DAMAGE = 10;
-const CAR_MAX_HP = 100;
+const CAR_MAX_HP = 180; // ~10 pistol shots to explode
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -528,7 +529,7 @@ export class ParisRoom extends Room<GameState> {
     // NPC target? Kill it (no score), respawn later.
     const npc = this.npcById.get(victimId);
     if (npc) {
-      if (npc.dead) return;
+      if (npc.dead || npc.kind === NPC_TANK) return; // tanks are indestructible
       npc.hp -= dmg;
       if (npc.hp <= 0) {
         npc.dead = true;
@@ -561,6 +562,7 @@ export class ParisRoom extends Room<GameState> {
     }
     const victim = this.state.players.get(victimId);
     if (!victim || !victim.alive) return;
+    if (victim.vehicleId) return; // safe inside a vehicle — the car takes the hits
     victim.health -= dmg;
     if (victim.health <= 0) this.killPlayer(victimId, killerId);
   }
@@ -626,6 +628,7 @@ export class ParisRoom extends Room<GameState> {
 
   /** Damage a player vehicle; explode (killing the driver) at 0 hp. */
   private damageCar(vid: string, dmg: number, attackerId: string) {
+    if (this.state.vehicles.get(vid)?.kind === 2) return; // tanks are indestructible
     const hp = (this.carHp.get(vid) ?? CAR_MAX_HP) - dmg;
     if (hp > 0) {
       this.carHp.set(vid, hp);
@@ -771,6 +774,7 @@ export class ParisRoom extends Room<GameState> {
       v.z = c.z;
       v.rotY = c.rotY;
       v.speed = c.speed;
+      v.hp = Math.round(((this.carHp.get(vid) ?? CAR_MAX_HP) / CAR_MAX_HP) * 100);
     }
 
     // Ambient NPCs.

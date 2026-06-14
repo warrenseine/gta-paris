@@ -27,11 +27,19 @@ function starGeometry(spikes: number, outer: number, inner: number): THREE.Shape
   return new THREE.ShapeGeometry(s);
 }
 const STAR = starGeometry(11, 1, 0.52);
+const PUFF = new THREE.CircleGeometry(1, 10);
+
+interface Puff {
+  mesh: THREE.Mesh;
+  ttl: number;
+  max: number;
+}
 
 // Pooled bullet tracers, sparks, and comic explosions.
 export class Effects {
   private tracers: Tracer[] = [];
   private bursts: Burst[] = [];
+  private puffs: Puff[] = [];
   private group = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
@@ -91,6 +99,17 @@ export class Effects {
     }
   }
 
+  /** A rising grey smoke puff (for damaged vehicles). */
+  smoke(x: number, z: number) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4a4a4a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(PUFF, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x + (Math.random() - 0.5) * 1.5, 1.6, z + (Math.random() - 0.5) * 1.5);
+    mesh.scale.setScalar(0.7);
+    this.group.add(mesh);
+    this.puffs.push({ mesh, ttl: 1.1, max: 1.1 });
+  }
+
   update(dt: number) {
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
@@ -115,6 +134,19 @@ export class Effects {
         this.group.remove(b.mesh);
         (b.mesh.material as THREE.Material).dispose();
         this.bursts.splice(i, 1);
+      }
+    }
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const p = this.puffs[i];
+      p.ttl -= dt;
+      const k = 1 - p.ttl / p.max; // 0 -> 1
+      p.mesh.position.y += 5 * dt; // drift up
+      p.mesh.scale.setScalar(0.7 + k * 2.8); // billow out
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k);
+      if (p.ttl <= 0) {
+        this.group.remove(p.mesh);
+        (p.mesh.material as THREE.Material).dispose();
+        this.puffs.splice(i, 1);
       }
     }
   }

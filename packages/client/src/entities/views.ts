@@ -172,6 +172,7 @@ export function makeTankMesh(): THREE.Group {
   barrel.rotation.x = Math.PI / 2;
   barrel.position.set(0, 1.8, 1.8);
   g.add(barrel);
+  g.scale.setScalar(1.3); // a bit bigger / more imposing
   return g;
 }
 
