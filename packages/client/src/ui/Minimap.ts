@@ -118,6 +118,12 @@ export class Minimap {
     ctx.fillStyle = '#2b303a';
     ctx.fillRect(0, 0, BASE_RES, BASE_RES);
 
+    // Parks (green), under the streets/buildings.
+    ctx.fillStyle = '#3f6b39';
+    for (const p of this.city.parks) {
+      ctx.fillRect(wx(p.cx) - p.hw * s, wz(p.cz) - p.hd * s, p.hw * 2 * s, p.hd * 2 * s);
+    }
+
     // Buildings.
     ctx.fillStyle = '#525a66';
     for (const b of this.city.buildings) {

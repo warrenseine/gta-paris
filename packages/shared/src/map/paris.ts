@@ -221,6 +221,7 @@ const PARKS: ParkDef[] = [
   { name: 'Bois de Boulogne', cx: -560, cz: -10, hw: 70, hd: 150 },
   { name: 'Bois de Vincennes', cx: 560, cz: 90, hw: 70, hd: 140 },
   { name: 'Parc des Princes', cx: -430, cz: 250, hw: 32, hd: 26 },
+  { name: 'Place des Vosges', cx: 205, cz: 22, hw: 17, hd: 17 }, // Marais garden square
 ];
 
 function distToSeg(x: number, z: number, a: Vec2, b: Vec2): number {
