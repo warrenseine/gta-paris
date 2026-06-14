@@ -42,6 +42,7 @@ export class Game {
   private hud: HUD;
   private minimap: Minimap;
   private city: CityData;
+  private cityRenderer!: CityRenderer;
   private world: MoveWorld;
 
   private footPred: Predictor<FootState>;
@@ -92,7 +93,8 @@ export class Game {
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.effects = new Effects(this.renderer.scene);
     this.hud = new HUD();
-    this.renderer.scene.add(new CityRenderer(this.city).group);
+    this.cityRenderer = new CityRenderer(this.city);
+    this.renderer.scene.add(this.cityRenderer.group);
 
     const self = (conn.room.state as { players?: { get(id: string): FootState | undefined } }).players?.get(
       conn.sessionId,
@@ -103,6 +105,10 @@ export class Game {
     this.footPred = new Predictor<FootState>(start, stepFoot);
 
     this.playerMesh = makePlayerMesh(COLORS.player);
+    this.playerMesh.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((m as THREE.Mesh & { isMesh?: boolean }).isMesh) m.castShadow = true;
+    });
     this.renderer.scene.add(this.playerMesh);
 
     this.entities = new EntityManager(this.renderer.scene, conn, (p) => this.onLocal(p));
@@ -400,8 +406,10 @@ export class Game {
     }
 
     this.entities.update(performance.now(), this.drivingId);
+    this.cityRenderer.update(frameDt);
     this.cam.update(camX, camZ, frameDt, lookX, lookZ);
     this.cam.setOccluded(this.occluded(camX, camZ));
+    this.renderer.setFocus(camX, camZ); // keep shadows centred on the player
     this.updateMinimap();
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);

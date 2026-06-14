@@ -6,9 +6,32 @@ import { buildLandmark } from './landmarks.js';
 
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 
+// Procedural ripple normal map for the animated Seine (scrolled each frame).
+function makeWaterNormal(): THREE.DataTexture {
+  const N = 64;
+  const data = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = (y * N + x) * 4;
+      const vx = Math.sin((x / N) * Math.PI * 4) * 0.5;
+      const vy = Math.cos((y / N) * Math.PI * 4) * 0.5;
+      const l = Math.hypot(vx, vy, 1);
+      data[i] = ((vx / l) * 0.5 + 0.5) * 255;
+      data[i + 1] = ((vy / l) * 0.5 + 0.5) * 255;
+      data[i + 2] = (1 / l) * 0.5 * 255 + 128;
+      data[i + 3] = 255;
+    }
+  }
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+
 // Builds the static city once: ground, river, roads, instanced buildings, landmarks.
 export class CityRenderer {
   readonly group = new THREE.Group();
+  private riverTex?: THREE.Texture;
 
   constructor(city: CityData) {
     this.buildGround(city);
@@ -58,6 +81,7 @@ export class CityRenderer {
     const ground = new THREE.Mesh(new THREE.ShapeGeometry(shape), flat(COLORS.ground));
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.1;
+    ground.receiveShadow = true;
     this.group.add(ground);
   }
 
@@ -66,7 +90,9 @@ export class CityRenderer {
     const pts = city.river.points;
     const hw = city.river.width / 2;
     const positions: number[] = [];
+    const uvs: number[] = [];
     const index: number[] = [];
+    let run = 0;
     for (let i = 0; i < pts.length; i++) {
       const prev = pts[Math.max(0, i - 1)];
       const next = pts[Math.min(pts.length - 1, i + 1)];
@@ -76,8 +102,11 @@ export class CityRenderer {
       // Perpendicular.
       const nx = -tz / tl;
       const nz = tx / tl;
+      if (i > 0) run += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+      const u = run / 24; // ripple tile ~24m
       positions.push(pts[i].x + nx * hw, 0, pts[i].z + nz * hw);
       positions.push(pts[i].x - nx * hw, 0, pts[i].z - nz * hw);
+      uvs.push(u, 0, u, 1);
     }
     for (let i = 0; i < pts.length - 1; i++) {
       const a = i * 2;
@@ -85,11 +114,19 @@ export class CityRenderer {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(index);
     geo.computeVertexNormals();
-    // Double-sided: the ribbon's normals can point down, which front-side
-    // culling would hide from the steep top-down camera.
-    const riverMat = new THREE.MeshLambertMaterial({ color: COLORS.river, side: THREE.DoubleSide });
+    // Animated water: scrolling ripple normal map catches the sun for moving glints.
+    this.riverTex = makeWaterNormal();
+    const riverMat = new THREE.MeshStandardMaterial({
+      color: COLORS.river,
+      side: THREE.DoubleSide,
+      metalness: 0.15,
+      roughness: 0.45,
+      normalMap: this.riverTex,
+      normalScale: new THREE.Vector2(0.55, 0.55),
+    });
     const river = new THREE.Mesh(geo, riverMat);
     river.position.y = 0.14; // clearly above roads/ground
     this.group.add(river);
@@ -104,6 +141,8 @@ export class CityRenderer {
 
       const deck = new THREE.Mesh(new THREE.BoxGeometry(b.length, 1, b.width), flat(COLORS.bridge));
       deck.position.y = 0.5;
+      deck.castShadow = true;
+      deck.receiveShadow = true;
       bg.add(deck);
 
       // Low side railings only — keeps a bit of verticality without the tangle
@@ -212,6 +251,8 @@ export class CityRenderer {
         inst.setMatrixAt(i, m);
       });
       inst.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true;
+      inst.receiveShadow = true;
       this.group.add(inst);
     }
   }
@@ -244,10 +285,30 @@ export class CityRenderer {
     });
     trunks.instanceMatrix.needsUpdate = true;
     foliage.instanceMatrix.needsUpdate = true;
+    trunks.castShadow = true;
+    foliage.castShadow = true;
     this.group.add(trunks, foliage);
   }
 
   private buildLandmarks(city: CityData) {
-    for (const l of city.landmarks) this.group.add(buildLandmark(l));
+    for (const l of city.landmarks) {
+      const g = buildLandmark(l);
+      g.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if ((mesh as THREE.Mesh & { isMesh?: boolean }).isMesh) {
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+        }
+      });
+      this.group.add(g);
+    }
+  }
+
+  /** Advance animated bits (the scrolling Seine). */
+  update(dt: number) {
+    if (this.riverTex) {
+      this.riverTex.offset.x += dt * 0.04;
+      this.riverTex.offset.y += dt * 0.02;
+    }
   }
 }
