@@ -11,6 +11,7 @@ import {
   DT,
   MSG,
   PLAYER,
+  CAR,
   INTEREST_RADIUS,
   MAX_REWIND_MS,
   type CityData,
@@ -99,6 +100,7 @@ interface Sim {
   foot: FootState;
   queue: InputCommand[];
   prevEnter: boolean;
+  lastToggleTick: number; // enter/exit debounce
   history: Snap[]; // for lag compensation
   lastFireTick: number;
   reloadAtTick: number;
@@ -110,6 +112,7 @@ const RESPAWN_TICKS = 3 * TICK_RATE;
 const RELOAD_TICKS = Math.ceil(1.4 * TICK_RATE);
 const PICKUP_RESPAWN_TICKS = 8 * TICK_RATE;
 const PICKUP_RADIUS = 1.6;
+const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -193,6 +196,7 @@ export class ParisRoom extends Room<GameState> {
       foot: { x: spawn.x, z: spawn.z, vx: 0, vz: 0, rotY: spawn.rotationY },
       queue: [],
       prevEnter: false,
+      lastToggleTick: -999,
       history: [],
       lastFireTick: -999,
       reloadAtTick: 0,
@@ -251,7 +255,7 @@ export class ParisRoom extends Room<GameState> {
   private handleFire(client: Client, msg: FireMessage) {
     const shooter = this.state.players.get(client.sessionId);
     const sim = this.sims.get(client.sessionId);
-    if (!shooter || !sim || !shooter.alive || shooter.vehicleId) return;
+    if (!shooter || !sim || !shooter.alive) return; // firing from a car is allowed
 
     const w = weapon(shooter.weaponId);
     const tick = this.state.serverTick;
@@ -381,7 +385,11 @@ export class ParisRoom extends Room<GameState> {
       let lastSeq = ps.lastProcessedInputSeq;
 
       for (const input of inputs) {
-        if (input.enterExit && !sim.prevEnter) this.handleEnterExit(id, ps, sim);
+        // Enter/exit on rising edge, debounced (avoid instant re-toggle).
+        if (input.enterExit && !sim.prevEnter && tickNo - sim.lastToggleTick > ENTER_COOLDOWN_TICKS) {
+          sim.lastToggleTick = tickNo;
+          this.handleEnterExit(id, ps, sim);
+        }
         sim.prevEnter = input.enterExit;
 
         if (ps.vehicleId) {
@@ -461,7 +469,7 @@ export class ParisRoom extends Room<GameState> {
 
   /** Server-side car-vs-car separation (player vehicles + NPC traffic). */
   private resolveCarCollisions() {
-    const R = 2.0;
+    const R = CAR.radius;
     const min = R * 2;
     interface C { x: number; z: number; set: (x: number, z: number) => void }
     const list: C[] = [];

@@ -14,7 +14,7 @@ export interface CarState {
 }
 
 export const CAR = {
-  radius: 1.6,
+  radius: 2.4, // covers the ~2.2x4.4 body so it can't slip into buildings
   maxSpeed: 40, // ~145 km/h
   enginePower: 30, // m/s^2 accel
   drag: 0.5,

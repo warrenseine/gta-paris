@@ -34,7 +34,6 @@ export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private wrap: HTMLDivElement;
-  private btn: HTMLButtonElement;
   private expanded = false;
   private scaleBase: number;
   private city: CityData;
@@ -55,16 +54,6 @@ export class Minimap {
       'border-radius:8px;overflow:hidden;opacity:.82;transition:opacity .15s;';
     this.canvas.style.cssText = 'display:block;width:210px;height:210px;image-rendering:auto;';
     this.wrap.appendChild(this.canvas);
-
-    this.btn = document.createElement('button');
-    this.btn.textContent = 'MAP';
-    this.btn.title = 'Toggle full map (M)';
-    this.btn.style.cssText =
-      'position:absolute;right:4px;bottom:4px;font:600 11px system-ui;padding:2px 8px;' +
-      'border:0;border-radius:5px;background:rgba(255,207,77,.9);color:#1a1d22;cursor:pointer;pointer-events:auto;';
-    this.btn.onclick = () => this.toggle();
-    this.wrap.appendChild(this.btn);
-
     document.body.appendChild(this.wrap);
   }
 
@@ -78,7 +67,6 @@ export class Minimap {
       this.wrap.style.opacity = '0.94';
       this.canvas.style.width = `${s}px`;
       this.canvas.style.height = `${s}px`;
-      this.btn.textContent = 'CLOSE';
     } else {
       this.wrap.style.top = '14px';
       this.wrap.style.left = '14px';
@@ -86,7 +74,6 @@ export class Minimap {
       this.wrap.style.opacity = '0.82';
       this.canvas.style.width = '210px';
       this.canvas.style.height = '210px';
-      this.btn.textContent = 'MAP';
     }
   }
 

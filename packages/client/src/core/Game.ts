@@ -5,13 +5,11 @@ import {
   stepFoot,
   stepCar,
   weapon,
-  emptyInput,
   MSG,
   type CityData,
   type FootState,
   type CarState,
   type HitTarget,
-  type InputCommand,
   type MoveWorld,
   type FireMessage,
   type FireEvent,
@@ -52,6 +50,9 @@ export class Game {
   private lookX = 0;
   private lookZ = 0;
   private fireCd = 0;
+  private lockedPos: { x: number; z: number } | null = null;
+  private visor: HTMLDivElement;
+  private tmpVec = new THREE.Vector3();
   private deathTime = 0;
   private scoreboardOpen = false;
 
@@ -77,6 +78,14 @@ export class Game {
     this.entities = new EntityManager(this.renderer.scene, conn, (p) => this.onLocal(p));
     this.minimap = new Minimap(this.city);
 
+    // Drive-by auto-aim reticle.
+    this.visor = document.createElement('div');
+    this.visor.style.cssText =
+      'position:fixed;width:42px;height:42px;border:2px solid #ff4d4d;border-radius:50%;' +
+      'box-shadow:0 0 8px rgba(255,77,77,.7);pointer-events:none;display:none;z-index:4;' +
+      'transform:translate(-50%,-50%);transition:left .05s linear,top .05s linear;';
+    document.body.appendChild(this.visor);
+
     this.audio.resume();
 
     // Remote players' shots -> cosmetic tracers + faint audio.
@@ -97,16 +106,13 @@ export class Game {
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Tab') this.scoreboardOpen = false;
     });
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyM') this.minimap.toggle();
-    });
 
     window.addEventListener('resize', () => this.cam.resize(this.renderer.aspect));
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this;
 
     new GameLoop(
       (dt) => this.step(dt),
-      (_alpha, frameDt) => this.render(frameDt),
+      (alpha, frameDt) => this.render(alpha, frameDt),
     ).start();
   }
 
@@ -116,8 +122,7 @@ export class Game {
     const dx = wx - this.selfX;
     const dz = wz - this.selfZ;
     const l = Math.hypot(dx, dz) || 1;
-    const cmd = { ...emptyInput(0), aimX: dx / l, aimZ: dz / l, fire: true };
-    this.shoot(cmd, this.local?.weaponId ?? 1);
+    this.shoot(0, this.local?.weaponId ?? 1, dx / l, dz / l);
   }
 
   private get selfX(): number {
@@ -169,6 +174,8 @@ export class Game {
     this.lookZ = cmd.lookZ;
     this.fireCd -= dt;
 
+    if (cmd.mapToggle) this.minimap.toggle();
+
     if (!this.alive) {
       this.effects.update(dt);
       return; // frozen while dead; server respawns us
@@ -180,32 +187,52 @@ export class Game {
 
     const wId = this.local?.weaponId ?? 1;
     const ammo = this.local?.ammo ?? 0;
-    if (!this.drivingId && cmd.fire && this.fireCd <= 0 && ammo > 0) this.shoot(cmd, wId);
+    if (cmd.fire && this.fireCd <= 0 && ammo > 0) {
+      if (this.drivingId && this.carPred) {
+        // Drive-by: auto-aim at the locked target, else fire straight ahead.
+        const t = this.lockedPos;
+        let ax = Math.sin(this.carPred.state.rotY);
+        let az = Math.cos(this.carPred.state.rotY);
+        if (t) {
+          const dx = t.x - this.selfX;
+          const dz = t.z - this.selfZ;
+          const dl = Math.hypot(dx, dz) || 1;
+          ax = dx / dl;
+          az = dz / dl;
+        }
+        this.shoot(cmd.seq, wId, ax, az);
+      } else {
+        this.shoot(cmd.seq, wId, cmd.aimX, cmd.aimZ);
+      }
+    }
 
     this.entities.animatePickups(performance.now());
     this.effects.update(dt);
   }
 
-  private shoot(cmd: InputCommand, weaponId: number) {
+  /** Targets shootable by the local player (visible remotes + NPCs). */
+  private hitTargets(): HitTarget[] {
+    const targets: HitTarget[] = [];
+    for (const [id, rp] of this.entities.remotes) {
+      if (rp.mesh.visible) targets.push({ id, x: rp.mesh.position.x, z: rp.mesh.position.z, r: 0.6 });
+    }
+    for (const [id, ne] of this.entities.npcs) {
+      if (ne.mesh.visible) targets.push({ id, x: ne.mesh.position.x, z: ne.mesh.position.z, r: 0.7 });
+    }
+    return targets;
+  }
+
+  private shoot(seq: number, weaponId: number, aimX: number, aimZ: number) {
     const w = weapon(weaponId);
     this.fireCd = 1 / w.fireRate;
 
-    const ox = this.selfX + cmd.aimX * 0.8;
-    const oz = this.selfZ + cmd.aimZ * 0.8;
+    const ox = this.selfX + aimX * 0.8;
+    const oz = this.selfZ + aimZ * 0.8;
 
-    // Cosmetic local tracer toward nearest player/NPC or full range.
-    const targets: HitTarget[] = [];
-    for (const [id, rp] of this.entities.remotes) {
-      if (!rp.mesh.visible) continue;
-      targets.push({ id, x: rp.mesh.position.x, z: rp.mesh.position.z, r: 0.6 });
-    }
-    for (const [id, ne] of this.entities.npcs) {
-      if (!ne.mesh.visible) continue;
-      targets.push({ id, x: ne.mesh.position.x, z: ne.mesh.position.z, r: 0.7 });
-    }
-    const hit = castRay(ox, oz, cmd.aimX, cmd.aimZ, w.range, targets, this.city.buildings);
-    const tx = hit ? hit.x : ox + cmd.aimX * w.range;
-    const tz = hit ? hit.z : oz + cmd.aimZ * w.range;
+    // Cosmetic local tracer toward the nearest target or full range.
+    const hit = castRay(ox, oz, aimX, aimZ, w.range, this.hitTargets(), this.city.buildings);
+    const tx = hit ? hit.x : ox + aimX * w.range;
+    const tz = hit ? hit.z : oz + aimZ * w.range;
     this.effects.tracer(ox, oz, tx, tz);
     this.audio.shot(0.5);
     if (hit) {
@@ -215,49 +242,76 @@ export class Game {
 
     // Authoritative request; server validates with lag compensation.
     const msg: FireMessage = {
-      seq: cmd.seq,
+      seq,
       ox,
       oz,
-      dx: cmd.aimX,
-      dz: cmd.aimZ,
+      dx: aimX,
+      dz: aimZ,
       weaponId,
-      clientTick: (this.conn.room.state as any).serverTick ?? 0,
+      clientTick: (this.conn.room.state as { serverTick?: number }).serverTick ?? 0,
     };
     this.conn.room.send(MSG.fire, msg);
   }
 
-  private render(frameDt: number) {
+  private render(alpha: number, frameDt: number) {
     const dead = !this.alive;
+    let camX: number;
+    let camZ: number;
+    let lookX = this.lookX;
+    let lookZ = this.lookZ;
 
     if (this.drivingId && this.carPred) {
       this.carPred.smooth(frameDt);
+      camX = this.carPred.renderXAt(alpha);
+      camZ = this.carPred.renderZAt(alpha);
+      const rot = this.carPred.renderRotAt(alpha);
       const ve = this.entities.vehicles.get(this.drivingId);
       if (ve) {
-        ve.mesh.position.set(this.carPred.renderX, 0, this.carPred.renderZ);
-        ve.mesh.rotation.y = this.carPred.state.rotY;
+        ve.mesh.position.set(camX, 0, camZ);
+        ve.mesh.rotation.y = rot;
       }
       this.playerMesh.visible = false;
+      lookX = Math.sin(rot); // camera leads toward car heading
+      lookZ = Math.cos(rot);
+      this.updateLockOn();
     } else {
       this.footPred.smooth(frameDt);
-      this.playerMesh.position.set(this.footPred.renderX, 0, this.footPred.renderZ);
-      this.playerMesh.rotation.y = this.footPred.state.rotY;
+      camX = this.footPred.renderXAt(alpha);
+      camZ = this.footPred.renderZAt(alpha);
+      this.playerMesh.position.set(camX, 0, camZ);
+      this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
       this.playerMesh.visible = !dead;
+      this.lockedPos = null;
+      this.visor.style.display = 'none';
     }
 
     this.entities.update(performance.now(), this.drivingId);
-    // Camera leads toward where you LOOK (mouse/right stick), or where the car
-    // is heading while driving — never coupled to on-foot movement.
-    let lookX = this.lookX;
-    let lookZ = this.lookZ;
-    if (this.drivingId && this.carPred) {
-      lookX = Math.sin(this.carPred.state.rotY);
-      lookZ = Math.cos(this.carPred.state.rotY);
-    }
-    this.cam.update(this.selfX, this.selfZ, frameDt, lookX, lookZ);
+    this.cam.update(camX, camZ, frameDt, lookX, lookZ);
     this.updateMinimap();
-
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);
+  }
+
+  /** Pick the nearest visible enemy within range and place the visor on it. */
+  private updateLockOn() {
+    let best: { x: number; z: number } | null = null;
+    let bd = 75; // lock range (m)
+    for (const t of this.hitTargets()) {
+      const d = Math.hypot(t.x - this.selfX, t.z - this.selfZ);
+      if (d < bd) {
+        bd = d;
+        best = { x: t.x, z: t.z };
+      }
+    }
+    this.lockedPos = best;
+    if (!best) {
+      this.visor.style.display = 'none';
+      return;
+    }
+    const v = this.tmpVec.set(best.x, 1.2, best.z).project(this.cam.camera);
+    this.visor.style.display = 'block';
+    this.visor.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
+    this.visor.style.top = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`;
   }
 
   private updateMinimap() {

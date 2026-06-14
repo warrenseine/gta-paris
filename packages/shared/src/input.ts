@@ -16,6 +16,8 @@ export interface InputCommand {
   enterExit: boolean;
   handbrake: boolean;
   sprint: boolean;
+  /** One-shot: toggle the full map (M / L2). Client-only. */
+  mapToggle: boolean;
   /** Throttle/steer for vehicles, derived from move on the client. */
   throttle: number; // -1..1
   steer: number; // -1..1
@@ -34,6 +36,7 @@ export function emptyInput(seq = 0): InputCommand {
     enterExit: false,
     handbrake: false,
     sprint: false,
+    mapToggle: false,
     throttle: 0,
     steer: 0,
   };

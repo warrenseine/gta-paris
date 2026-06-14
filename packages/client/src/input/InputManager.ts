@@ -21,6 +21,10 @@ export class InputManager {
   private mouseNdc = new THREE.Vector2(0, 0);
   private seq = 0;
   lastDevice: LastDevice = 'kbm';
+  /** Latched aim direction — kept when the right stick is released. */
+  private lastAimX = 0;
+  private lastAimZ = 1;
+  private prevL2 = false;
 
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -70,6 +74,7 @@ export class InputManager {
     let enterExit = false;
     let handbrake = false;
     let sprint = false;
+    let mapToggle = false;
 
     const pad = this.pollGamepad();
     if (pad) {
@@ -89,10 +94,16 @@ export class InputManager {
         this.lastDevice = 'gamepad';
       }
       const rt = pad.buttons[7]?.value ?? 0;
-      if (rt > 0.4 || pad.buttons[5]?.pressed) fire = true;
-      if (pad.buttons[0]?.pressed) enterExit = true; // A
+      if (rt > 0.4 || pad.buttons[5]?.pressed) fire = true; // R2 / RB
+      if (pad.buttons[3]?.pressed) enterExit = true; // Y (top)
       if (pad.buttons[1]?.pressed) handbrake = true; // B
       if (pad.buttons[10]?.pressed) sprint = true; // L3
+      // L2 toggles the full map (edge-detected).
+      const l2 = (pad.buttons[6]?.value ?? 0) > 0.4 || (pad.buttons[6]?.pressed ?? false);
+      if (l2 && !this.prevL2) mapToggle = true;
+      this.prevL2 = l2;
+    } else {
+      this.prevL2 = false;
     }
 
     // Keyboard movement (additive; overrides if pressed).
@@ -108,7 +119,8 @@ export class InputManager {
     }
     if (this.keys.has('ShiftLeft')) sprint = true;
     if (this.keys.has('Space')) handbrake = true;
-    if (this.pressedOnce.has('KeyF')) enterExit = true; // one-shot, latched
+    if (this.pressedOnce.has('KeyF') || this.pressedOnce.has('KeyY')) enterExit = true; // one-shot
+    if (this.pressedOnce.has('KeyM')) mapToggle = true; // one-shot
     if (this.mouseDown) fire = true;
 
     // Normalize move to unit disc.
@@ -123,23 +135,27 @@ export class InputManager {
     cmd.handbrake = handbrake;
     cmd.enterExit = enterExit;
     cmd.fire = fire;
+    cmd.mapToggle = mapToggle;
 
-    // --- Aim ---
+    // --- Aim --- (latched: keep the last orientation when no fresh aim input)
     if (hasStickAim) {
       const al = Math.hypot(aimX, aimZ) || 1;
-      cmd.aimX = aimX / al;
-      cmd.aimZ = aimZ / al;
-    } else {
-      // Mouse -> ground plane -> aim vector from player.
+      this.lastAimX = aimX / al;
+      this.lastAimZ = aimZ / al;
+    } else if (this.lastDevice === 'kbm') {
+      // Mouse -> ground plane -> aim vector from player (live, follows cursor).
       this.raycaster.setFromCamera(this.mouseNdc, camera as THREE.PerspectiveCamera);
       if (this.raycaster.ray.intersectPlane(this.groundPlane, this.hitPoint)) {
         const dx = this.hitPoint.x - playerX;
         const dz = this.hitPoint.z - playerZ;
         const dl = Math.hypot(dx, dz) || 1;
-        cmd.aimX = dx / dl;
-        cmd.aimZ = dz / dl;
+        this.lastAimX = dx / dl;
+        this.lastAimZ = dz / dl;
       }
     }
+    // else: gamepad with stick released -> keep last aim (no snap-back).
+    cmd.aimX = this.lastAimX;
+    cmd.aimZ = this.lastAimZ;
 
     // --- Look (camera lead): screen-space + player-INDEPENDENT, so walking
     // doesn't pan the view. Only moving the mouse / right stick re-orients. ---
