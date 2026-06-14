@@ -30,6 +30,7 @@ export class MapEditor {
   private viewSize = 700;
   private autoBridges = true; // recompute bridges from roads until you edit one
   private pendingRoad: { x: number; z: number } | null = null; // first click of a new road
+  private fileHandle: FileSystemFileHandle | null = null; // remembered save target
   private bar: HTMLDivElement;
   private dom: HTMLCanvasElement;
 
@@ -209,7 +210,7 @@ export class MapEditor {
     else if (k === 'x' || e.code === 'Delete' || e.code === 'Backspace') this.deleteSel();
     else if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      this.exportMap();
+      void this.exportMap();
     } else return;
     this.renderUI();
   };
@@ -381,9 +382,29 @@ export class MapEditor {
     this.marker.position.set(p.x, 2, p.z);
   }
 
-  private exportMap() {
+  private async exportMap() {
     this.recomputeBridges();
-    const blob = new Blob([JSON.stringify({ enabled: true, city: this.city })], { type: 'application/json' });
+    const json = JSON.stringify({ enabled: true, city: this.city });
+    const picker = (window as unknown as { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
+    if (picker) {
+      try {
+        if (!this.fileHandle) {
+          // Prompt once; reuse the chosen file for every later Cmd+S (no prompt).
+          this.fileHandle = await picker({
+            suggestedName: 'custom-map.json',
+            types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+          });
+        }
+        const w = await (this.fileHandle as unknown as { createWritable: () => Promise<{ write: (s: string) => Promise<void>; close: () => Promise<void> }> }).createWritable();
+        await w.write(json);
+        await w.close();
+        return;
+      } catch (e) {
+        if ((e as DOMException).name === 'AbortError') return; // user cancelled the picker
+        // otherwise fall back to a plain download
+      }
+    }
+    const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'custom-map.json';
@@ -405,6 +426,6 @@ export class MapEditor {
       `<span style="margin-left:10px;opacity:.8">drag=move · Q/E rotate · -/= scale · X delete · right-drag/arrows pan · wheel zoom</span>` +
       `<span id="ed-export" style="margin-left:auto;padding:4px 12px;border-radius:5px;background:#39d98a;color:#000;cursor:pointer;pointer-events:auto">Export (⌘S)</span>`;
     const exp = this.bar.querySelector('#ed-export') as HTMLElement;
-    exp.onclick = () => this.exportMap();
+    exp.onclick = () => void this.exportMap();
   }
 }
