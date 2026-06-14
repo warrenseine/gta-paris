@@ -87,6 +87,7 @@ export interface CityData {
   landmarks: LandmarkDef[];
   river: RiverDef;
   parks: ParkDef[];
+  trees: Vec2[];
   bridges: { x: number; z: number; rotationY: number; length: number; width: number }[];
   spawns: SpawnPoint[];
   pickups: PickupSpawn[];

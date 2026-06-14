@@ -22,7 +22,7 @@ import { CityRenderer } from '../render/CityRenderer.js';
 import { Effects } from '../render/effects.js';
 import { COLORS } from '../render/materials.js';
 import { InputManager } from '../input/InputManager.js';
-import { makePlayerMesh } from '../entities/views.js';
+import { makePlayerMesh, animateWalk } from '../entities/views.js';
 import { HUD } from '../ui/HUD.js';
 import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
@@ -62,7 +62,7 @@ export class Game {
 
   constructor(container: HTMLElement, private conn: Connection) {
     this.city = buildParis();
-    this.world = { buildings: this.city.buildings };
+    this.world = { buildings: this.city.buildings, trees: this.city.trees };
     this.renderer = new Renderer(container);
     this.cam = new FollowCamera(this.renderer.aspect);
     this.input = new InputManager(this.renderer.renderer.domElement);
@@ -299,6 +299,8 @@ export class Game {
       this.playerMesh.position.set(camX, 0, camZ);
       this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
       this.playerMesh.visible = !dead;
+      const sp = Math.hypot(this.footPred.state.vx, this.footPred.state.vz);
+      animateWalk(this.playerMesh, sp, frameDt);
     }
 
     if (dead) {

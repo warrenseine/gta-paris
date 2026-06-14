@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Interpolation } from '../net/Interpolation.js';
-import { makePedMesh, makeCarMesh, makeCopMesh, makePoliceCarMesh } from './views.js';
+import { makePedMesh, makeCarMesh, makeCopMesh, makePoliceCarMesh, animateWalk } from './views.js';
 import { COLORS } from '../render/materials.js';
 
 // Ambient NPC (ped or traffic car), interpolated like remote players.
@@ -36,12 +36,18 @@ export class NpcEntity {
     }
   }
 
+  private lastNow = 0;
+
   update(now: number) {
     if (this.dead) return; // frozen corpse
     const s = this.interp.sample(now);
     if (!s) return;
+    const dt = this.lastNow ? Math.min(0.1, (now - this.lastNow) / 1000) : 0;
+    const speed = dt > 0 ? Math.hypot(s.x - this.mesh.position.x, s.z - this.mesh.position.z) / dt : 0;
+    this.lastNow = now;
     this.mesh.position.set(s.x, 0, s.z);
     this.mesh.rotation.y = s.rotY;
+    animateWalk(this.mesh, speed, dt);
   }
 
   dispose(scene: THREE.Scene) {

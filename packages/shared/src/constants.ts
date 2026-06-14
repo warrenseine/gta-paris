@@ -28,8 +28,8 @@ export const PLAYER = {
   accel: 60, // m/s^2 (snappy)
   maxHealth: 100,
   maxStamina: 100,
-  staminaDrain: 34, // per second while sprinting (~3s of sprint)
-  staminaRegen: 18, // per second when not sprinting
+  staminaDrain: 14, // per second while sprinting (~7s of sprint)
+  staminaRegen: 11, // per second when not sprinting
   staminaSprintMin: 5, // need at least this to start sprinting
 };
 

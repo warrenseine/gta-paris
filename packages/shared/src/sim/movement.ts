@@ -18,6 +18,7 @@ export interface FootState {
 
 export interface MoveWorld {
   buildings: BuildingDef[];
+  trees?: { x: number; z: number }[]; // used by vehicles only
 }
 
 /** Advance an on-foot player one fixed step. Pure: returns a new state. */

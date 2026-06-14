@@ -83,6 +83,31 @@ export function resolveAgainstBuildings(c: Circle, buildings: BuildingDef[]): Ci
   return { x, z, r: c.r };
 }
 
+/** Resolve a circle against tree trunks (circle-vs-circle pushout). */
+export function resolveAgainstTrees(
+  c: Circle,
+  trees: { x: number; z: number }[],
+  treeR: number,
+): { x: number; z: number } {
+  let x = c.x;
+  let z = c.z;
+  const min = c.r + treeR;
+  for (const t of trees) {
+    let dx = x - t.x;
+    let dz = z - t.z;
+    if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
+    const d = Math.hypot(dx, dz);
+    if (d < min && d > 1e-4) {
+      const push = min - d;
+      dx /= d;
+      dz /= d;
+      x += dx * push;
+      z += dz * push;
+    }
+  }
+  return { x, z };
+}
+
 /** Clamp inside the circular city (the Périphérique ring is the hard boundary). */
 export function clampToBounds(x: number, z: number, r: number): { x: number; z: number } {
   const max = CITY_RADIUS - r;

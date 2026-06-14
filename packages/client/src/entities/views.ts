@@ -35,7 +35,31 @@ function makeHuman(shirt: number, pants = 0x3a3f48): THREE.Group {
   face.position.set(0, 2.0, 0.24);
   g.add(face);
 
+  // Limbs pivot from the hip/shoulder so the walk swing looks right.
+  for (const limb of [lLeg, rLeg]) limb.geometry.translate(0, -0.475, 0);
+  lLeg.position.y = 0.95;
+  rLeg.position.y = 0.95;
+  for (const limb of [lArm, rArm]) limb.geometry.translate(0, -0.39, 0);
+  lArm.position.y = 1.73;
+  rArm.position.y = 1.73;
+
+  g.userData.walk = { lLeg, rLeg, lArm, rArm, phase: 0 };
   return g;
+}
+
+// Swing limbs while moving; settle to neutral when still.
+export function animateWalk(group: THREE.Object3D, speed: number, dt: number) {
+  const w = group.userData.walk as
+    | { lLeg: THREE.Mesh; rLeg: THREE.Mesh; lArm: THREE.Mesh; rArm: THREE.Mesh; phase: number }
+    | undefined;
+  if (!w) return;
+  const intensity = Math.min(1, speed / 5);
+  w.phase += dt * (4 + speed * 0.9);
+  const swing = Math.sin(w.phase) * 0.7 * intensity;
+  w.lLeg.rotation.x = swing;
+  w.rLeg.rotation.x = -swing;
+  w.lArm.rotation.x = -swing;
+  w.rArm.rotation.x = swing;
 }
 
 export function makePlayerMesh(color: number): THREE.Group {

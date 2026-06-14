@@ -544,7 +544,7 @@ export class ParisRoom extends Room<GameState> {
 
   private tick() {
     const tickNo = this.state.serverTick;
-    const world = { buildings: this.city.buildings };
+    const world = { buildings: this.city.buildings, trees: this.city.trees };
 
     for (const [id, sim] of this.sims) {
       const ps = this.state.players.get(id);
@@ -866,8 +866,10 @@ export class ParisRoom extends Room<GameState> {
         continue;
       }
       for (const [, ps] of this.state.players) {
-        if (!ps.alive || ps.vehicleId) continue;
-        if (Math.hypot(pk.x - ps.x, pk.z - ps.z) >= PICKUP_RADIUS) continue;
+        if (!ps.alive) continue;
+        // Cars roll over pickups too (wider reach when driving).
+        const reach = ps.vehicleId ? PICKUP_RADIUS + CAR.radius : PICKUP_RADIUS;
+        if (Math.hypot(pk.x - ps.x, pk.z - ps.z) >= reach) continue;
         if (pk.kind === 1) {
           if (ps.health >= PLAYER.maxHealth) continue; // only grab health when hurt
           ps.health = Math.min(PLAYER.maxHealth, ps.health + 50);

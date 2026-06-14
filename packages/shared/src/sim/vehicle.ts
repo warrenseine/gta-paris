@@ -3,8 +3,9 @@
 
 import type { InputCommand } from '../input.js';
 import type { BuildingDef } from '../map/types.js';
+import type { Vec2 } from '../math.js';
 import { clamp } from '../math.js';
-import { resolveAgainstBuildings, clampToBounds } from './collision.js';
+import { resolveAgainstBuildings, resolveAgainstTrees, clampToBounds } from './collision.js';
 
 export interface CarState {
   x: number;
@@ -25,7 +26,10 @@ export const CAR = {
 
 export interface CarWorld {
   buildings: BuildingDef[];
+  trees?: Vec2[];
 }
+
+const TREE_RADIUS = 1.1;
 
 /**
  * Arcade, direction-based driving (like on-foot but with momentum): the input
@@ -67,6 +71,14 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
     speed *= 0.7; // glance off walls instead of slamming to a stop
     x = resolved.x;
     z = resolved.z;
+  }
+  if (world.trees) {
+    const t = resolveAgainstTrees({ x, z, r: CAR.radius }, world.trees, TREE_RADIUS);
+    if (t.x !== x || t.z !== z) {
+      speed *= 0.85; // trees barely slow you
+      x = t.x;
+      z = t.z;
+    }
   }
   const bounded = clampToBounds(x, z, CAR.radius);
   x = bounded.x;

@@ -38,25 +38,29 @@ function colonnade(count: number, spacing: number, r: number, h: number, z: numb
   return g;
 }
 
+// A square (4-sided) tapered section, aligned to axes.
+function frustum(rBottom: number, rTop: number, h: number, color: number, y: number): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, h, 4), flat(color));
+  m.rotation.y = Math.PI / 4;
+  m.position.y = y;
+  return m;
+}
+
 function eiffel(): THREE.Group {
   const g = new THREE.Group();
-  // Four legs angled inward, meeting at the first platform.
-  const legPos = [
-    [-16, -16], [16, -16], [-16, 16], [16, 16],
-  ];
-  for (const [lx, lz] of legPos) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(2, 4, 42, 6), flat(ZINC));
-    leg.position.set(lx * 0.6, 21, lz * 0.6);
-    leg.rotation.x = (lz / 16) * 0.14;
-    leg.rotation.z = (-lx / 16) * 0.14;
-    g.add(leg);
-  }
-  g.add(box(40, 3, 40, ZINC, 0, 40)); // first deck
-  g.add(box(22, 36, 22, ZINC, 0, 60)); // mid section (tapered look via stack)
-  g.add(box(18, 3, 18, ZINC, 0, 80)); // second deck
-  g.add(box(10, 60, 10, ZINC, 0, 110));
-  g.add(cyl(3, 40, ZINC, 0, 158, 0, 6));
-  g.add(cone(2, 16, ZINC, 0, 184, 0, 6)); // spire
+  // Tapering tower: wide arched base -> narrowing sections -> spire.
+  g.add(frustum(30, 18, 44, ZINC, 22)); // base (legs splay out at the bottom)
+  g.add(box(40, 3, 40, ZINC, 0, 44)); // first platform
+  g.add(frustum(13, 7, 60, ZINC, 76)); // mid
+  g.add(box(20, 3, 20, ZINC, 0, 106)); // second platform
+  g.add(frustum(6, 2, 70, ZINC, 142)); // upper
+  g.add(cyl(1.6, 24, ZINC, 0, 189, 0, 6)); // mast
+  g.add(cone(1.4, 8, ZINC, 0, 205, 0, 6)); // tip
+  // Arch hint under the base.
+  g.add(box(8, 24, 8, 0x6a7079, -13, 12, 0));
+  g.add(box(8, 24, 8, 0x6a7079, 13, 12, 0));
+  g.add(box(8, 24, 8, 0x6a7079, 0, 12, -13));
+  g.add(box(8, 24, 8, 0x6a7079, 0, 12, 13));
   return g;
 }
 

@@ -183,7 +183,7 @@ function buildBuildings(): BuildingDef[] {
       if (nearSeine(cx, cz, 10)) continue; // keep quais clear so the river is crossable
       if (nearLandmark(cx, cz, 60)) continue;
       if (inPark(cx, cz, 4)) continue;
-      if (onRoad(cx, cz, 4)) continue;
+      if (onRoad(cx, cz, 13)) continue; // building footprints must clear the roadway
       if (rng() < 0.08) continue;
       const hw = 7 + rng() * 6;
       const hd = 7 + rng() * 6;
@@ -202,6 +202,32 @@ function buildBuildings(): BuildingDef[] {
     }
   }
   return buildings;
+}
+
+// Trees: scattered in parks, lining the avenues. Deterministic (shared so the
+// server can collide cars against them and the client renders the same set).
+function buildTrees(): Vec2[] {
+  const rng = mulberry32(0x7e5);
+  const pts: Vec2[] = [];
+  for (const p of PARKS) {
+    const n = Math.floor((p.hw * p.hd) / 260);
+    for (let i = 0; i < n; i++) {
+      pts.push({ x: p.cx + (rng() - 0.5) * 2 * (p.hw - 3), z: p.cz + (rng() - 0.5) * 2 * (p.hd - 3) });
+    }
+  }
+  for (const r of ROADS) {
+    const len = Math.hypot(r.to.x - r.from.x, r.to.z - r.from.z);
+    const ux = (r.to.x - r.from.x) / len;
+    const uz = (r.to.z - r.from.z) / len;
+    const off = r.width / 2 + 3;
+    for (let d = 14; d < len - 14; d += 24) {
+      const px = r.from.x + ux * d;
+      const pz = r.from.z + uz * d;
+      pts.push({ x: px - uz * off, z: pz + ux * off });
+      pts.push({ x: px + uz * off, z: pz - ux * off });
+    }
+  }
+  return pts.filter((p) => Math.hypot(p.x, p.z) < CITY_RADIUS - PERIPH_WIDTH);
 }
 
 function buildLandmarks(): LandmarkDef[] {
@@ -228,6 +254,7 @@ export function buildParis(): CityData {
     landmarks: buildLandmarks(),
     river: { points: SEINE_POINTS, width: SEINE_WIDTH },
     parks: PARKS,
+    trees: buildTrees(),
     bridges: [
       { x: -300, z: 80, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
       { x: 30, z: 55, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },

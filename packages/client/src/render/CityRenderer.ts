@@ -146,37 +146,13 @@ export class CityRenderer {
   }
 
   private buildTrees(city: CityData) {
+    const pts = city.trees;
+    if (!pts.length) return;
     let seed = 0x7e5;
     const rng = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 4294967296;
     };
-    const pts: { x: number; z: number }[] = [];
-    // Scatter in parks.
-    for (const p of city.parks) {
-      const n = Math.floor((p.hw * p.hd) / 220);
-      for (let i = 0; i < n; i++) {
-        pts.push({ x: p.cx + (rng() - 0.5) * 2 * (p.hw - 3), z: p.cz + (rng() - 0.5) * 2 * (p.hd - 3) });
-      }
-    }
-    // Line the avenues (both sides).
-    for (const r of city.roads) {
-      for (let i = 0; i < r.points.length - 1; i++) {
-        const a = r.points[i];
-        const b = r.points[i + 1];
-        const len = Math.hypot(b.x - a.x, b.z - a.z);
-        const ux = (b.x - a.x) / len;
-        const uz = (b.z - a.z) / len;
-        const off = r.width / 2 + 3;
-        for (let d = 12; d < len - 12; d += 20) {
-          const px = a.x + ux * d;
-          const pz = a.z + uz * d;
-          pts.push({ x: px - uz * off, z: pz + ux * off });
-          pts.push({ x: px + uz * off, z: pz - ux * off });
-        }
-      }
-    }
-    if (!pts.length) return;
 
     const trunkGeo = new THREE.CylinderGeometry(0.35, 0.45, 3, 5);
     const foliageGeo = new THREE.IcosahedronGeometry(2.4, 0);
