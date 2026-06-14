@@ -42,18 +42,33 @@ export function makePlayerMesh(color: number): THREE.Group {
   return makeHuman(color);
 }
 
-// Blocky car: chassis + cabin + facing marker.
+// Blocky car. +Z is forward: bright headlights up front, red taillights at back,
+// cabin set toward the rear so the longer hood reads as the front.
 export function makeCarMesh(color: number): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 4.4), flat(color));
   body.position.y = 0.6;
   g.add(body);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.8, 2.0), flat(0x2a2f36));
-  cabin.position.set(0, 1.3, -0.2);
+
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.8, 1.8), flat(0x20242b));
+  cabin.position.set(0, 1.3, -0.6); // toward the back
   g.add(cabin);
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.4), flat(0x111111));
-  hood.position.set(0, 0.9, 2.2); // +Z = forward
-  g.add(hood);
+
+  // Windshield (lighter, front face of cabin) to bias the "face" forward.
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 0.15), flat(0x8fbfd6));
+  windshield.position.set(0, 1.35, 0.32);
+  g.add(windshield);
+
+  // Flat light bars on the TOP edges so front/back read from the top-down camera.
+  const headMat = new THREE.MeshLambertMaterial({ color: 0xfff2b0, emissive: 0x8a7a20 });
+  const tailMat = new THREE.MeshLambertMaterial({ color: 0xd83030, emissive: 0x6a0c0c });
+  const barGeo = new THREE.BoxGeometry(1.7, 0.14, 0.45);
+  const head = new THREE.Mesh(barGeo, headMat);
+  head.position.set(0, 1.12, 2.0); // front
+  g.add(head);
+  const tail = new THREE.Mesh(barGeo, tailMat);
+  tail.position.set(0, 1.12, -2.0); // back
+  g.add(tail);
   return g;
 }
 

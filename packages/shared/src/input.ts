@@ -9,6 +9,9 @@ export interface InputCommand {
   /** Aim direction in world XZ plane (unit vector). Right stick or mouse->ground. */
   aimX: number;
   aimZ: number;
+  /** View-look offset in screen space (cursor offset from centre / right stick), -1..1. Client-only (camera). */
+  lookX: number;
+  lookZ: number;
   fire: boolean;
   enterExit: boolean;
   handbrake: boolean;
@@ -25,6 +28,8 @@ export function emptyInput(seq = 0): InputCommand {
     moveZ: 0,
     aimX: 0,
     aimZ: 1,
+    lookX: 0,
+    lookZ: 0,
     fire: false,
     enterExit: false,
     handbrake: false,

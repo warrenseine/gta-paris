@@ -15,50 +15,53 @@ export interface CarState {
 
 export const CAR = {
   radius: 1.6,
-  maxSpeed: 42, // ~150 km/h
-  reverseSpeed: 12,
-  enginePower: 28, // m/s^2 accel
-  brakePower: 50,
-  drag: 0.6,
-  rollingResist: 3,
-  /** Steering rate (rad/s) at full lock, scaled by speed. */
-  turnRate: 2.4,
-  grip: 0.92,
+  maxSpeed: 40, // ~145 km/h
+  enginePower: 30, // m/s^2 accel
+  drag: 0.5,
+  rollingResist: 4,
+  /** How fast the car can swing its heading toward the input direction (rad/s). */
+  turnRate: 3.4,
 };
 
 export interface CarWorld {
   buildings: BuildingDef[];
 }
 
+/**
+ * Arcade, direction-based driving (like on-foot but with momentum): the input
+ * vector (moveX/moveZ, world space) is the desired heading. The car turns toward
+ * it — faster at low speed, lazier at high speed — and drives forward. Pushing
+ * opposite the current heading brakes. Forward-only (no manual reverse).
+ */
 export function stepCar(s: CarState, input: InputCommand, dt: number, world: CarWorld): CarState {
   let speed = s.speed;
-  const throttle = input.throttle; // -1..1
+  let rotY = s.rotY;
+  const il = Math.hypot(input.moveX, input.moveZ);
 
-  // Longitudinal forces.
-  if (throttle > 0.01) {
-    speed += CAR.enginePower * throttle * dt;
-  } else if (throttle < -0.01) {
-    if (speed > 0.1) speed -= CAR.brakePower * -throttle * dt; // braking
-    else speed += CAR.enginePower * throttle * dt; // reverse
+  if (il > 0.15) {
+    const target = Math.atan2(input.moveX, input.moveZ);
+    let diff = target - rotY;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+
+    const speedFrac = clamp(speed / CAR.maxSpeed, 0, 1);
+    const turn = CAR.turnRate * (1 - 0.45 * speedFrac) * dt;
+    rotY += clamp(diff, -turn, turn);
+
+    // Accelerate when aligned with intent; brake when pushing against heading.
+    const align = Math.cos(diff); // 1 aligned .. -1 opposite
+    speed += CAR.enginePower * il * align * (align < 0 ? 1.6 : 1) * dt;
   }
-  // Handbrake hard stop-ish.
-  if (input.handbrake) speed *= Math.max(0, 1 - 4 * dt);
-  // Resistance.
+
+  if (input.handbrake) speed *= Math.max(0, 1 - 5 * dt);
   speed -= speed * CAR.drag * dt;
-  speed -= Math.sign(speed) * CAR.rollingResist * dt;
-  speed = clamp(speed, -CAR.reverseSpeed, CAR.maxSpeed);
-  if (Math.abs(speed) < 0.05) speed = 0;
+  speed -= CAR.rollingResist * dt;
+  speed = clamp(speed, 0, CAR.maxSpeed);
+  if (speed < 0.05) speed = 0;
 
-  // Steering scales with speed (no turning when stopped), reverses in reverse.
-  const speedFactor = clamp(Math.abs(speed) / 12, 0, 1);
-  const steerSign = speed >= 0 ? 1 : -1;
-  const rotY = s.rotY + input.steer * CAR.turnRate * speedFactor * steerSign * dt;
-
-  // Integrate position along heading.
   let x = s.x + Math.sin(rotY) * speed * dt;
   let z = s.z + Math.cos(rotY) * speed * dt;
 
-  // Collision: resolve circle, bleed speed on impact.
   const resolved = resolveAgainstBuildings({ x, z, r: CAR.radius }, world.buildings);
   if (resolved.x !== x || resolved.z !== z) {
     speed *= 0.4;

@@ -141,8 +141,18 @@ export class InputManager {
       }
     }
 
-    // --- Vehicle throttle/steer derived from move ---
-    // W (up-screen, moveZ<0) = accelerate forward; A/D = steer.
+    // --- Look (camera lead): screen-space + player-INDEPENDENT, so walking
+    // doesn't pan the view. Only moving the mouse / right stick re-orients. ---
+    const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
+    if (hasStickAim) {
+      cmd.lookX = clamp1(aimX); // raw right-stick offset
+      cmd.lookZ = clamp1(aimZ);
+    } else {
+      cmd.lookX = clamp1(this.mouseNdc.x);
+      cmd.lookZ = clamp1(-this.mouseNdc.y); // up-screen = -Z
+    }
+
+    // Vehicle controls now use moveX/moveZ directly (drive toward stick dir).
     cmd.throttle = -cmd.moveZ;
     cmd.steer = cmd.moveX;
 

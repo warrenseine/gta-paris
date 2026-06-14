@@ -47,8 +47,8 @@ export class Game {
 
   private audio = new AudioManager();
   private local: LocalPlayerFields | null = null;
-  private lastAimX = 0;
-  private lastAimZ = 1;
+  private lookX = 0;
+  private lookZ = 0;
   private fireCd = 0;
   private deathTime = 0;
   private scoreboardOpen = false;
@@ -159,8 +159,8 @@ export class Game {
 
   private step(dt: number) {
     const cmd = this.input.sample(this.cam.camera, this.selfX, this.selfZ);
-    this.lastAimX = cmd.aimX;
-    this.lastAimZ = cmd.aimZ;
+    this.lookX = cmd.lookX;
+    this.lookZ = cmd.lookZ;
     this.fireCd -= dt;
 
     if (!this.alive) {
@@ -239,8 +239,15 @@ export class Game {
     }
 
     this.entities.update(performance.now(), this.drivingId);
-    // Camera leads toward where you aim/look, not where you move.
-    this.cam.update(this.selfX, this.selfZ, frameDt, this.lastAimX, this.lastAimZ);
+    // Camera leads toward where you LOOK (mouse/right stick), or where the car
+    // is heading while driving — never coupled to on-foot movement.
+    let lookX = this.lookX;
+    let lookZ = this.lookZ;
+    if (this.drivingId && this.carPred) {
+      lookX = Math.sin(this.carPred.state.rotY);
+      lookZ = Math.cos(this.carPred.state.rotY);
+    }
+    this.cam.update(this.selfX, this.selfZ, frameDt, lookX, lookZ);
 
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);
