@@ -15,6 +15,7 @@ export interface LocalPlayerFields {
   seq: number;
   health: number;
   stamina: number;
+  wanted: boolean;
   alive: boolean;
   weaponId: number;
   ammo: number;
@@ -62,6 +63,7 @@ export class EntityManager {
             seq: player.lastProcessedInputSeq,
             health: player.health,
             stamina: player.stamina,
+            wanted: player.wanted,
             alive: player.alive,
             weaponId: player.weaponId,
             ammo: player.ammo,

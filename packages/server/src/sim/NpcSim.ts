@@ -12,6 +12,8 @@ import {
 
 export const NPC_PED = 0;
 export const NPC_CAR = 1;
+export const NPC_COP = 2; // cop on foot
+export const NPC_POLICE = 3; // police car
 
 export interface NpcSimState {
   id: string;
@@ -32,6 +34,10 @@ export interface NpcSimState {
   seg: number;
   dir: number; // +1 / -1 along the path
   speed: number;
+  // cop / police
+  targetId: string;
+  fireCd: number;
+  deployed: boolean;
 }
 
 export const PED_HP = 20;
@@ -39,6 +45,7 @@ export const CAR_HP = 70;
 
 const PED_COUNT = 150;
 const TRAFFIC_COUNT = 26;
+const POLICE_COUNT = 4;
 const PED_SPEED = 1.6;
 const PED_RADIUS = 0.4;
 // Peds cluster in the central playfield where the landmarks + action are.
@@ -82,6 +89,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       seg: 0,
       dir: 1,
       speed: 0,
+      targetId: '',
+      fireCd: 0,
+      deployed: false,
     });
   }
 
@@ -109,10 +119,46 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       seg: startSeg,
       dir: Math.random() < 0.5 ? 1 : -1,
       speed: rand(10, 18),
+      targetId: '',
+      fireCd: 0,
+      deployed: false,
+    });
+  }
+
+  // Police cars roaming the boulevards.
+  for (let i = 0; i < POLICE_COUNT; i++) {
+    const road = city.roads[(i * 5 + 2) % city.roads.length];
+    const path = road.points.map((p) => ({ x: p.x, z: p.z }));
+    const a = path[0];
+    npcs.push({
+      id: `police${i}`,
+      kind: NPC_POLICE,
+      x: a.x,
+      z: a.z,
+      rotY: 0,
+      colorId: 0,
+      hp: CAR_HP,
+      dead: false,
+      respawnAt: 0,
+      tx: 0,
+      tz: 0,
+      repathAt: 0,
+      path,
+      seg: 0,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      speed: 14,
+      targetId: '',
+      fireCd: 0,
+      deployed: false,
     });
   }
 
   return npcs;
+}
+
+/** Drive a police car along its patrol unless told to stop. */
+export function stepPoliceCar(n: NpcSimState, dt: number) {
+  stepCarNpc(n, dt);
 }
 
 export function stepNpc(n: NpcSimState, dt: number, city: CityData, tick: number) {
@@ -123,7 +169,8 @@ export function stepNpc(n: NpcSimState, dt: number, city: CityData, tick: number
 /** Bring a killed NPC back to life at a fresh spot. */
 export function reviveNpc(n: NpcSimState, city: CityData) {
   n.dead = false;
-  n.hp = n.kind === NPC_CAR ? CAR_HP : PED_HP;
+  n.deployed = false;
+  n.hp = n.kind === NPC_PED ? PED_HP : CAR_HP;
   if (n.kind === NPC_PED) {
     const p = walkablePoint(city);
     n.x = p.x;

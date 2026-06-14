@@ -9,6 +9,7 @@ export interface HudState {
   deaths: number;
   dead: boolean;
   respawnIn: number;
+  wanted: boolean;
 }
 
 export interface ScoreRow {
@@ -25,6 +26,7 @@ export class HUD {
   private staminaFill: HTMLDivElement;
   private weapon: HTMLDivElement;
   private score: HTMLDivElement;
+  private wanted: HTMLDivElement;
   private hint: HTMLDivElement;
   private killfeed: HTMLDivElement;
   private overlay: HTMLDivElement;
@@ -42,6 +44,10 @@ export class HUD {
     this.stamina.appendChild(this.staminaFill);
     this.weapon = this.panel('right:18px;bottom:18px;font-size:20px;text-align:right;');
     this.score = this.panel('right:18px;top:14px;font-size:16px;text-align:right;opacity:.9;');
+    this.wanted = this.panel(
+      'top:14px;left:50%;transform:translateX(-50%);font-size:20px;font-weight:800;color:#ff3b3b;display:none;',
+    );
+    this.wanted.textContent = '★ WANTED ★';
     this.hint = this.panel(
       'left:50%;transform:translateX(-50%);bottom:18px;font-size:14px;opacity:.85;text-align:center;',
     );
@@ -72,6 +78,7 @@ export class HUD {
     this.weapon.textContent = `${s.weapon}  ${s.ammo}`;
     this.score.textContent = `K ${s.kills}  /  D ${s.deaths}`;
     this.hint.textContent = s.hint;
+    this.wanted.style.display = s.wanted ? 'block' : 'none';
 
     if (s.dead) {
       this.overlay.style.display = 'flex';

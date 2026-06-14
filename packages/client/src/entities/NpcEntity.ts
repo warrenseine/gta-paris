@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Interpolation } from '../net/Interpolation.js';
-import { makePedMesh, makeCarMesh } from './views.js';
+import { makePedMesh, makeCarMesh, makeCopMesh, makePoliceCarMesh } from './views.js';
 import { COLORS } from '../render/materials.js';
 
 // Ambient NPC (ped or traffic car), interpolated like remote players.
@@ -12,7 +12,14 @@ export class NpcEntity {
 
   constructor(scene: THREE.Scene, kind: number, colorId: number) {
     this.kind = kind;
-    this.mesh = kind === 1 ? makeCarMesh(COLORS.car[colorId % COLORS.car.length]) : makePedMesh(colorId);
+    this.mesh =
+      kind === 3
+        ? makePoliceCarMesh()
+        : kind === 2
+          ? makeCopMesh()
+          : kind === 1
+            ? makeCarMesh(COLORS.car[colorId % COLORS.car.length])
+            : makePedMesh(colorId);
     scene.add(this.mesh);
   }
 

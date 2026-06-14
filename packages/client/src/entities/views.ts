@@ -79,6 +79,39 @@ export function makePedMesh(colorId: number): THREE.Group {
   return makeHuman(PED_SHIRTS[colorId % PED_SHIRTS.length], PED_PANTS[colorId % PED_PANTS.length]);
 }
 
+// Cop: dark-blue uniform humanoid with a cap.
+export function makeCopMesh(): THREE.Group {
+  const g = makeHuman(0x26407a, 0x1b2b52);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.46), flat(0x16204a));
+  cap.position.y = 2.24;
+  g.add(cap);
+  return g;
+}
+
+// Police car: white body, blue accents, a roof light bar.
+export function makePoliceCarMesh(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 4.4), flat(0xe8edf2)));
+  (g.children[0] as THREE.Mesh).position.y = 0.6;
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.8, 1.8), flat(0x2740a0));
+  cabin.position.set(0, 1.3, -0.6);
+  g.add(cabin);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.5, 1.6), flat(0x2740a0));
+  door.position.set(0, 0.6, 0);
+  g.add(door);
+  // Roof light bar (red + blue).
+  const red = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.4), new THREE.MeshLambertMaterial({ color: 0xff2a2a, emissive: 0x660000 }));
+  red.position.set(-0.35, 1.85, -0.3);
+  const blue = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.4), new THREE.MeshLambertMaterial({ color: 0x2a5cff, emissive: 0x001466 }));
+  blue.position.set(0.35, 1.85, -0.3);
+  g.add(red, blue);
+  // Headlights front.
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.14, 0.45), new THREE.MeshLambertMaterial({ color: 0xfff2b0, emissive: 0x8a7a20 }));
+  hl.position.set(0, 1.12, 2.0);
+  g.add(hl);
+  return g;
+}
+
 // Pickup: a glowing pad + an item shape that reads from above.
 // kind 1 = health (red cross); kind 0 = weapon (weaponId 1 pistol, 2 SMG, 3 shotgun).
 export function makePickupMesh(kind: number, weaponId: number): THREE.Group {

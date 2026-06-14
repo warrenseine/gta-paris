@@ -430,6 +430,7 @@ export class Game {
       deaths: l?.deaths ?? 0,
       dead,
       respawnIn,
+      wanted: l?.wanted ?? false,
     });
 
     const state = this.conn.room.state as any;
