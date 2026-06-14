@@ -97,7 +97,7 @@ export class InputManager {
       if (rt > 0.4 || pad.buttons[5]?.pressed) fire = true; // R2 / RB
       if (pad.buttons[3]?.pressed) enterExit = true; // Y (top)
       if (pad.buttons[1]?.pressed) handbrake = true; // B
-      if (pad.buttons[10]?.pressed) sprint = true; // L3
+      if (pad.buttons[0]?.pressed) sprint = true; // A (hold to sprint)
       // L2 held = show the full map (released = hide).
       if ((pad.buttons[6]?.value ?? 0) > 0.4 || (pad.buttons[6]?.pressed ?? false)) mapHold = true;
     }

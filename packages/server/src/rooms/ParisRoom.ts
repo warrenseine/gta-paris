@@ -32,6 +32,7 @@ export class PlayerState extends Schema {
   @type('number') vz = 0;
   @type('number') rotY = 0;
   @type('number') health = 100;
+  @type('number') stamina = 100;
   @type('boolean') alive = true;
   @type('number') weaponId = 1;
   @type('number') ammo = 12;
@@ -115,6 +116,8 @@ const PICKUP_RESPAWN_TICKS = 8 * TICK_RATE;
 const PICKUP_RADIUS = 1.6;
 const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
 const CORPSE_TICKS = 7 * TICK_RATE; // how long a dead ped stays on the ground
+const CAR_MAX_HP = 100;
+const CRASH_SPEED = 9; // impact speed above which a collision damages the car
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -122,6 +125,8 @@ export class ParisRoom extends Room<GameState> {
   private sims = new Map<string, Sim>();
   private cars = new Map<string, CarState>();
   private pickupRespawn = new Map<string, number>();
+  private carHp = new Map<string, number>(); // player-vehicle health
+  private vehicleSpawns: { x: number; z: number; rotationY: number; colorId: number }[] = [];
   private npcSims: NpcSimState[] = [];
   private npcById = new Map<string, NpcSimState>();
 
@@ -141,6 +146,7 @@ export class ParisRoom extends Room<GameState> {
     this.setState(new GameState());
     this.city = buildParis();
 
+    this.vehicleSpawns = this.city.vehicles.map((v) => ({ ...v }));
     this.city.vehicles.forEach((v, i) => {
       const id = `v${i}`;
       const vs = new VehicleState();
@@ -151,6 +157,7 @@ export class ParisRoom extends Room<GameState> {
       vs.colorId = v.colorId;
       this.state.vehicles.set(id, vs);
       this.cars.set(id, { x: v.x, z: v.z, rotY: v.rotationY, speed: 0 });
+      this.carHp.set(id, CAR_MAX_HP);
     });
 
     // Ambient NPCs (peds + traffic).
@@ -196,7 +203,7 @@ export class ParisRoom extends Room<GameState> {
     p.rotY = spawn.rotationY;
     this.state.players.set(client.sessionId, p);
     this.sims.set(client.sessionId, {
-      foot: { x: spawn.x, z: spawn.z, vx: 0, vz: 0, rotY: spawn.rotationY },
+      foot: { x: spawn.x, z: spawn.z, vx: 0, vz: 0, rotY: spawn.rotationY, stamina: PLAYER.maxStamina },
       queue: [],
       prevEnter: false,
       lastToggleTick: -999,
@@ -230,7 +237,7 @@ export class ParisRoom extends Room<GameState> {
         v.driverId = '';
         const ox = v.x + Math.cos(v.rotY) * 2.5;
         const oz = v.z - Math.sin(v.rotY) * 2.5;
-        sim.foot = { x: ox, z: oz, vx: 0, vz: 0, rotY: v.rotY };
+        sim.foot = { x: ox, z: oz, vx: 0, vz: 0, rotY: v.rotY, stamina: sim.foot.stamina };
         ps.x = ox;
         ps.z = oz;
       }
@@ -283,6 +290,11 @@ export class ParisRoom extends Room<GameState> {
       if (n.dead) continue;
       targets.push({ id: n.id, x: n.x, z: n.z, r: n.kind === NPC_CAR ? 1.7 : 0.7 });
     }
+    // Player vehicles (so cars can be shot up and explode).
+    for (const [vid, v] of this.state.vehicles) {
+      if (vid === shooter.vehicleId) continue; // not your own ride
+      targets.push({ id: vid, x: v.x, z: v.z, r: 1.7 });
+    }
 
     let hitTargetId: string | null = null;
     let hx = 0;
@@ -320,42 +332,71 @@ export class ParisRoom extends Room<GameState> {
         npc.dead = true;
         const ns = this.state.npcs.get(npc.id);
         if (npc.kind === NPC_CAR) {
-          // Cars explode: FX event + remove immediately, respawn later.
           this.broadcast(MSG.explosion, { x: npc.x, z: npc.z });
           npc.respawnAt = this.state.serverTick + 12 * TICK_RATE;
           this.state.npcs.delete(npc.id);
         } else {
-          // Pedestrians leave a body on the ground for a while.
           if (ns) ns.dead = true;
           npc.respawnAt = this.state.serverTick + CORPSE_TICKS;
         }
       }
       return;
     }
+    // Player vehicle target? Damage the car (can explode).
+    if (this.carHp.has(victimId)) {
+      this.damageCar(victimId, dmg, killerId);
+      return;
+    }
     const victim = this.state.players.get(victimId);
     if (!victim || !victim.alive) return;
     victim.health -= dmg;
-    if (victim.health <= 0) {
-      victim.health = 0;
-      victim.alive = false;
-      victim.deaths++;
-      const killer = this.state.players.get(killerId);
-      if (killer) killer.kills++;
-      // Mirror into the non-filtered scoreboard.
-      const vScore = this.state.scores.get(victimId);
-      if (vScore) vScore.deaths++;
-      const kScore = this.state.scores.get(killerId);
-      if (kScore && killerId !== victimId) kScore.kills++;
-      // Eject from vehicle on death.
-      if (victim.vehicleId) {
-        const v = this.state.vehicles.get(victim.vehicleId);
-        if (v) v.driverId = '';
-        victim.vehicleId = '';
-      }
-      const sim = this.sims.get(victimId);
-      if (sim) sim.respawnAtTick = this.state.serverTick + RESPAWN_TICKS;
-      this.pushKill(killer?.nickname ?? '?', victim.nickname);
+    if (victim.health <= 0) this.killPlayer(victimId, killerId);
+  }
+
+  private killPlayer(victimId: string, killerId: string) {
+    const victim = this.state.players.get(victimId);
+    if (!victim || !victim.alive) return;
+    victim.health = 0;
+    victim.alive = false;
+    victim.deaths++;
+    const killer = this.state.players.get(killerId);
+    if (killer && killerId !== victimId) killer.kills++;
+    const vScore = this.state.scores.get(victimId);
+    if (vScore) vScore.deaths++;
+    const kScore = this.state.scores.get(killerId);
+    if (kScore && killerId !== victimId) kScore.kills++;
+    if (victim.vehicleId) {
+      const v = this.state.vehicles.get(victim.vehicleId);
+      if (v) v.driverId = '';
+      victim.vehicleId = '';
     }
+    const sim = this.sims.get(victimId);
+    if (sim) sim.respawnAtTick = this.state.serverTick + RESPAWN_TICKS;
+    this.pushKill(killer?.nickname ?? '?', victim.nickname);
+  }
+
+  /** Damage a player vehicle; explode (killing the driver) at 0 hp. */
+  private damageCar(vid: string, dmg: number, attackerId: string) {
+    const hp = (this.carHp.get(vid) ?? CAR_MAX_HP) - dmg;
+    if (hp > 0) {
+      this.carHp.set(vid, hp);
+      return;
+    }
+    const v = this.state.vehicles.get(vid);
+    if (v) this.broadcast(MSG.explosion, { x: v.x, z: v.z });
+    // Kill the driver, if any.
+    if (v?.driverId) this.killPlayer(v.driverId, attackerId || v.driverId);
+    // Respawn the wreck at a vehicle spawn, repaired.
+    const sp = this.vehicleSpawns[Math.floor(Math.random() * this.vehicleSpawns.length)];
+    const car = this.cars.get(vid);
+    if (car && sp) {
+      car.x = sp.x;
+      car.z = sp.z;
+      car.rotY = sp.rotationY;
+      car.speed = 0;
+    }
+    if (v) v.driverId = '';
+    this.carHp.set(vid, CAR_MAX_HP);
   }
 
   private pushKill(killer: string, victim: string) {
@@ -368,7 +409,7 @@ export class ParisRoom extends Room<GameState> {
 
   private respawn(ps: PlayerState, sim: Sim) {
     const sp = this.randomSpawn();
-    sim.foot = { x: sp.x, z: sp.z, vx: 0, vz: 0, rotY: sp.rotationY };
+    sim.foot = { x: sp.x, z: sp.z, vx: 0, vz: 0, rotY: sp.rotationY, stamina: PLAYER.maxStamina };
     sim.history.length = 0;
     ps.x = sp.x;
     ps.z = sp.z;
@@ -407,8 +448,14 @@ export class ParisRoom extends Room<GameState> {
         if (ps.vehicleId) {
           const car = this.cars.get(ps.vehicleId);
           if (car) {
+            const before = Math.abs(car.speed);
             const next = stepCar(car, input, DT, world);
             this.cars.set(ps.vehicleId, next);
+            // Sudden speed loss = a crash into a building -> damage.
+            const drop = before - Math.abs(next.speed);
+            if (before > CRASH_SPEED && drop > before * 0.3) {
+              this.damageCar(ps.vehicleId, drop * 3, id);
+            }
             sim.foot.x = next.x;
             sim.foot.z = next.z;
             sim.foot.rotY = next.rotY;
@@ -435,6 +482,7 @@ export class ParisRoom extends Room<GameState> {
       ps.vx = sim.foot.vx;
       ps.vz = sim.foot.vz;
       ps.rotY = sim.foot.rotY;
+      ps.stamina = sim.foot.stamina;
       ps.lastProcessedInputSeq = lastSeq;
 
       // Record lag-comp history.

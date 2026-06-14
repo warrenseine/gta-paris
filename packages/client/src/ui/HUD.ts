@@ -1,6 +1,7 @@
 // DOM HUD: health, weapon/ammo, score, hint, killfeed, death overlay, scoreboard.
 export interface HudState {
   health: number;
+  stamina: number; // 0..100
   weapon: string;
   ammo: number | string;
   hint: string;
@@ -20,6 +21,8 @@ export interface ScoreRow {
 export class HUD {
   private root: HTMLDivElement;
   private health: HTMLDivElement;
+  private stamina: HTMLDivElement;
+  private staminaFill: HTMLDivElement;
   private weapon: HTMLDivElement;
   private score: HTMLDivElement;
   private hint: HTMLDivElement;
@@ -32,7 +35,11 @@ export class HUD {
     this.root.style.cssText =
       'position:fixed;inset:0;pointer-events:none;font-family:system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);';
 
-    this.health = this.panel('left:18px;bottom:18px;font-size:22px;font-weight:700;');
+    this.health = this.panel('left:18px;bottom:26px;font-size:22px;font-weight:700;');
+    this.stamina = this.panel('left:18px;bottom:14px;width:120px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);');
+    this.staminaFill = document.createElement('div');
+    this.staminaFill.style.cssText = 'height:100%;width:100%;border-radius:3px;background:#5fd0ff;transition:width .1s;';
+    this.stamina.appendChild(this.staminaFill);
     this.weapon = this.panel('right:18px;bottom:18px;font-size:20px;text-align:right;');
     this.score = this.panel('right:18px;top:14px;font-size:16px;text-align:right;opacity:.9;');
     this.hint = this.panel(
@@ -60,6 +67,8 @@ export class HUD {
   set(s: HudState) {
     this.health.textContent = `♥ ${Math.max(0, Math.round(s.health))}`;
     this.health.style.color = s.health < 30 ? '#ff5b5b' : '#fff';
+    this.staminaFill.style.width = `${Math.max(0, Math.min(100, s.stamina))}%`;
+    this.staminaFill.style.background = s.stamina < 20 ? '#ff8a3a' : '#5fd0ff';
     this.weapon.textContent = `${s.weapon}  ${s.ammo}`;
     this.score.textContent = `K ${s.kills}  /  D ${s.deaths}`;
     this.hint.textContent = s.hint;

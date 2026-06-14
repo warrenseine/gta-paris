@@ -23,6 +23,10 @@ export const PLAYER = {
   sprintSpeed: 10,
   accel: 60, // m/s^2 (snappy)
   maxHealth: 100,
+  maxStamina: 100,
+  staminaDrain: 34, // per second while sprinting (~3s of sprint)
+  staminaRegen: 18, // per second when not sprinting
+  staminaSprintMin: 5, // need at least this to start sprinting
 };
 
 /** Camera rig. High + steep so the city reads top-down and buildings don't tower. */

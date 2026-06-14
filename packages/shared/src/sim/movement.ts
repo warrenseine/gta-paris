@@ -13,6 +13,7 @@ export interface FootState {
   vx: number;
   vz: number;
   rotY: number; // facing (movement or aim)
+  stamina: number; // 0..PLAYER.maxStamina; gates sprinting
 }
 
 export interface MoveWorld {
@@ -21,9 +22,15 @@ export interface MoveWorld {
 
 /** Advance an on-foot player one fixed step. Pure: returns a new state. */
 export function stepFoot(s: FootState, input: InputCommand, dt: number, world: MoveWorld): FootState {
-  const target = PLAYER[input.sprint ? 'sprintSpeed' : 'walkSpeed'];
-  // Desired velocity from move intent.
   const mlen = Math.hypot(input.moveX, input.moveZ);
+  // Sprint is gated by stamina: needs a minimum to start, drains while used,
+  // regenerates otherwise. Deterministic so client + server agree.
+  let stamina = s.stamina ?? PLAYER.maxStamina;
+  const sprinting = input.sprint && mlen > 1e-3 && stamina > PLAYER.staminaSprintMin;
+  if (sprinting) stamina = Math.max(0, stamina - PLAYER.staminaDrain * dt);
+  else stamina = Math.min(PLAYER.maxStamina, stamina + PLAYER.staminaRegen * dt);
+  const target = sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+  // Desired velocity from move intent.
   let dvx = 0;
   let dvz = 0;
   if (mlen > 1e-3) {
@@ -63,5 +70,5 @@ export function stepFoot(s: FootState, input: InputCommand, dt: number, world: M
     rotY = Math.atan2(vx, vz);
   }
 
-  return { x, z, vx, vz, rotY };
+  return { x, z, vx, vz, rotY, stamina };
 }

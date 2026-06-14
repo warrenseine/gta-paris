@@ -5,6 +5,7 @@ import {
   stepFoot,
   stepCar,
   weapon,
+  PLAYER,
   MSG,
   type CityData,
   type FootState,
@@ -69,10 +70,12 @@ export class Game {
     this.hud = new HUD();
     this.renderer.scene.add(new CityRenderer(this.city).group);
 
-    const self = (conn.room.state as any).players?.get(conn.sessionId);
+    const self = (conn.room.state as { players?: { get(id: string): FootState | undefined } }).players?.get(
+      conn.sessionId,
+    );
     const start: FootState = self
-      ? { x: self.x, z: self.z, vx: 0, vz: 0, rotY: self.rotY }
-      : { x: 0, z: -20, vx: 0, vz: 0, rotY: 0 };
+      ? { x: self.x, z: self.z, vx: 0, vz: 0, rotY: self.rotY, stamina: PLAYER.maxStamina }
+      : { x: 0, z: -20, vx: 0, vz: 0, rotY: 0, stamina: PLAYER.maxStamina };
     this.footPred = new Predictor<FootState>(start, stepFoot);
 
     this.playerMesh = makePlayerMesh(COLORS.player);
@@ -151,7 +154,7 @@ export class Game {
     if (wasAlive && !p.alive) this.deathTime = performance.now();
     if (!wasAlive && p.alive) {
       // Respawned: snap predictor to server position.
-      this.footPred.reset({ x: p.x, z: p.z, vx: 0, vz: 0, rotY: p.rotY });
+      this.footPred.reset({ x: p.x, z: p.z, vx: 0, vz: 0, rotY: p.rotY, stamina: p.stamina });
       this.drivingId = null;
       this.carPred = null;
     }
@@ -167,14 +170,19 @@ export class Game {
     if (!p.vehicleId && this.drivingId) {
       this.drivingId = null;
       this.carPred = null;
-      this.footPred.reset({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY });
+      this.footPred.reset({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY, stamina: p.stamina });
     }
 
     if (this.drivingId && this.carPred) {
       const v = this.entities.vehicleStates.get(this.drivingId);
       if (v) this.carPred.reconcile({ x: v.x, z: v.z, rotY: v.rotY, speed: v.speed }, p.seq, 1 / 30, this.world);
     } else {
-      this.footPred.reconcile({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY }, p.seq, 1 / 30, this.world);
+      this.footPred.reconcile(
+        { x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY, stamina: p.stamina },
+        p.seq,
+        1 / 30,
+        this.world,
+      );
     }
   }
 
@@ -410,13 +418,14 @@ export class Game {
     const nearCar = !this.drivingId && !dead && this.nearestEnterableCar() < 10;
     this.hud.set({
       health: l?.health ?? 100,
+      stamina: this.drivingId ? 100 : (this.footPred.state.stamina / PLAYER.maxStamina) * 100,
       weapon: this.drivingId ? 'Driving' : w.name,
       ammo: this.drivingId ? '' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
       hint: this.drivingId
-        ? `WASD drive · F / A exit · Tab scores · ${online} online`
+        ? `WASD drive · Y exit · Tab scores · ${online} online`
         : nearCar
-          ? `▶ Press F / A to enter car`
-          : `WASD move · aim · shoot · Tab scores · ${online} online`,
+          ? `▶ Press F / Y to enter car`
+          : `WASD move · A sprint · aim · shoot · ${online} online`,
       kills: l?.kills ?? 0,
       deaths: l?.deaths ?? 0,
       dead,
