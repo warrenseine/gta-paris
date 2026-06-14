@@ -257,6 +257,25 @@ function parcdesprinces(): THREE.Group {
   return g;
 }
 
+function bnf(): THREE.Group {
+  const g = new THREE.Group();
+  const GLASS = 0x9fc4d4;
+  // Sunken garden courtyard in the middle.
+  const court = new THREE.Mesh(new THREE.BoxGeometry(34, 2, 34), flat(0x3f6b39));
+  court.position.y = 1;
+  g.add(court);
+  // Four L-shaped glass towers at the corners (like open books).
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const cx = sx * 24;
+      const cz = sz * 24;
+      g.add(box(8, 46, 20, GLASS, cx, 23, cz - sz * 6)); // tall leaf
+      g.add(box(20, 46, 8, GLASS, cx - sx * 6, 23, cz)); // second leaf -> L
+    }
+  }
+  return g;
+}
+
 const BUILDERS: Record<string, () => THREE.Group> = {
   eiffel,
   arcdetriomphe,
@@ -272,6 +291,7 @@ const BUILDERS: Record<string, () => THREE.Group> = {
   grandpalais,
   montparnasse,
   parcdesprinces,
+  bnf,
 };
 
 export function buildLandmark(def: LandmarkDef): THREE.Group {

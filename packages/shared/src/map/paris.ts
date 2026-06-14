@@ -49,6 +49,7 @@ const N = {
   buttes: { x: 320, z: -240 },
   perelachaise: { x: 390, z: -30 },
   parcdesprinces: { x: -430, z: 250 }, // SW stadium, near the Bois de Boulogne
+  bnf: { x: 420, z: 250 }, // Bibliothèque François Mitterrand, SE south bank
 };
 
 interface Seg {
@@ -213,7 +214,7 @@ const SEINE_WIDTH = 46;
 
 const PARKS: ParkDef[] = [
   { name: 'Jardin des Tuileries', cx: -28, cz: 2, hw: 62, hd: 16 }, // just south of the straight rue de Rivoli (z=-20)
-  { name: 'Champ de Mars', cx: -225, cz: 108, hw: 60, hd: 18 }, // between the Eiffel Tower and Invalides
+  { name: 'Champ de Mars', cx: -300, cz: 148, hw: 24, hd: 44 }, // long lawn south of the Eiffel toward the École Militaire
   { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
   { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
   { name: 'Buttes-Chaumont', cx: 320, cz: -245, hw: 50, hd: 45 },
@@ -342,6 +343,7 @@ const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number; off?: Vec2; rotationY
   { key: 'grandpalais', at: N.grandpalais, off: { x: -8, z: -26 } },
   { key: 'montparnasse', at: N.montparnasse },
   { key: 'parcdesprinces', at: N.parcdesprinces },
+  { key: 'bnf', at: N.bnf },
 ];
 
 function nearLandmark(x: number, z: number, margin: number): boolean {
