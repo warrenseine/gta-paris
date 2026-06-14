@@ -1,7 +1,7 @@
 import { Room, type Client } from 'colyseus';
 import { Schema, MapSchema, ArraySchema, type, view, StateView } from '@colyseus/schema';
 import {
-  buildParis,
+  loadMap,
   stepFoot,
   stepCar,
   emptyInput,
@@ -180,7 +180,7 @@ export class ParisRoom extends Room<GameState> {
 
   onCreate() {
     this.setState(new GameState());
-    this.city = buildParis();
+    this.city = loadMap();
     this.water = {
       seine: this.city.river.points,
       seineWidth: this.city.river.width,

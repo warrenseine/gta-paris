@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  buildParis,
+  loadMap,
   castRay,
   stepFoot,
   stepCar,
@@ -32,6 +32,7 @@ import { GameLoop } from './GameLoop.js';
 import type { Connection } from '../net/Connection.js';
 import { Predictor } from '../net/Predictor.js';
 import { EntityManager, type LocalPlayerFields } from '../entities/EntityManager.js';
+import { MapEditor } from '../editor/MapEditor.js';
 import { AudioManager } from '../audio/AudioManager.js';
 
 export class Game {
@@ -50,6 +51,7 @@ export class Game {
   private drivingId: string | null = null;
   private entities: EntityManager;
   private playerMesh: THREE.Group;
+  private editor!: MapEditor;
 
   private audio = new AudioManager();
   private local: LocalPlayerFields | null = null;
@@ -67,7 +69,7 @@ export class Game {
   private scoreboardOpen = false;
 
   constructor(container: HTMLElement, private conn: Connection) {
-    this.city = buildParis();
+    this.city = loadMap();
     this.world = {
       buildings: this.city.buildings,
       trees: this.city.trees,
@@ -114,6 +116,10 @@ export class Game {
 
     this.entities = new EntityManager(this.renderer.scene, conn, (p) => this.onLocal(p));
     this.minimap = new Minimap(this.city);
+    this.editor = new MapEditor(this.renderer.scene, this.renderer.renderer, this.city, [
+      this.cityRenderer.group,
+      this.playerMesh,
+    ]);
 
     // Drive-by auto-aim reticle.
     this.visor = document.createElement('div');
@@ -224,6 +230,7 @@ export class Game {
   }
 
   private step(dt: number) {
+    if (this.editor.active) return; // editing: freeze the game sim
     const cmd = this.input.sample(this.cam.camera, this.selfX, this.selfZ);
     this.lookX = cmd.lookX;
     this.lookZ = cmd.lookZ;
@@ -333,6 +340,10 @@ export class Game {
   }
 
   private render(alpha: number, frameDt: number) {
+    if (this.editor.active) {
+      this.editor.render();
+      return;
+    }
     const dead = !this.alive;
     let camX: number;
     let camZ: number;

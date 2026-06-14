@@ -275,54 +275,57 @@ function inDeck(px: number, pz: number, b: Bridge): boolean {
   return Math.abs(lx) <= b.length / 2 && Math.abs(lz) <= b.width / 2;
 }
 
-// Deck every span where a road runs over open water, then keep only a MINIMAL
-// set of decks that still covers all crossings (greedy by area) — so the many
-// roads converging on the île don't pile up a tangle of redundant bridges.
-function buildBridges(): Bridge[] {
+/**
+ * Deck every span where a road runs over open water, then keep only a MINIMAL
+ * set of decks that still covers all crossings (greedy by area). Pure helper so
+ * the map editor can recompute bridges after roads/river are edited.
+ */
+export function computeBridges(
+  roads: { points: Vec2[]; width: number }[],
+  river: { points: Vec2[]; width: number },
+): Bridge[] {
+  const rp = river.points;
+  const rw = river.width;
   const wet = (x: number, z: number) => {
-    for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
-      if (distToSeg(x, z, SEINE_POINTS[i], SEINE_POINTS[i + 1]) < SEINE_WIDTH / 2) return true;
+    for (let i = 0; i < rp.length - 1; i++) {
+      if (distToSeg(x, z, rp[i], rp[i + 1]) < rw / 2) return true;
     }
     return false;
   };
   const cands: Bridge[] = [];
   const wetPts: Vec2[] = [];
-  for (const r of ROADS) {
-    const dx = r.to.x - r.from.x;
-    const dz = r.to.z - r.from.z;
-    const len = Math.hypot(dx, dz);
-    if (len < 1) continue;
-    const ux = dx / len;
-    const uz = dz / len;
-    const rotationY = Math.atan2(-dz, dx); // deck follows the road
-    const width = r.width + 4; // slim ribbon, barely wider than the road
-    const steps = Math.max(2, Math.ceil(len / 3));
-    let spanStart = -1;
-    // One slim deck per contiguous wet span, carrying the road straight across.
-    const deck = (d0: number, d1: number) => {
-      const mid = (d0 + d1) / 2;
-      cands.push({
-        x: r.from.x + ux * mid,
-        z: r.from.z + uz * mid,
-        rotationY,
-        length: d1 - d0 + 16, // ~8m onto each bank
-        width,
-      });
-    };
-    for (let i = 0; i <= steps; i++) {
-      const d = (len * i) / steps;
-      const px = r.from.x + ux * d;
-      const pz = r.from.z + uz * d;
-      const isWet = wet(px, pz);
-      if (isWet) {
-        wetPts.push({ x: px, z: pz });
-        if (spanStart < 0) spanStart = d;
-      } else if (spanStart >= 0) {
-        deck(spanStart, d);
-        spanStart = -1;
+  for (const road of roads) {
+    for (let s = 0; s < road.points.length - 1; s++) {
+      const from = road.points[s];
+      const to = road.points[s + 1];
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const len = Math.hypot(dx, dz);
+      if (len < 1) continue;
+      const ux = dx / len;
+      const uz = dz / len;
+      const rotationY = Math.atan2(-dz, dx); // deck follows the road
+      const width = road.width + 4; // slim ribbon, barely wider than the road
+      const steps = Math.max(2, Math.ceil(len / 3));
+      let spanStart = -1;
+      const deck = (d0: number, d1: number) => {
+        const mid = (d0 + d1) / 2;
+        cands.push({ x: from.x + ux * mid, z: from.z + uz * mid, rotationY, length: d1 - d0 + 16, width });
+      };
+      for (let i = 0; i <= steps; i++) {
+        const d = (len * i) / steps;
+        const px = from.x + ux * d;
+        const pz = from.z + uz * d;
+        if (wet(px, pz)) {
+          wetPts.push({ x: px, z: pz });
+          if (spanStart < 0) spanStart = d;
+        } else if (spanStart >= 0) {
+          deck(spanStart, d);
+          spanStart = -1;
+        }
       }
+      if (spanStart >= 0) deck(spanStart, len);
     }
-    if (spanStart >= 0) deck(spanStart, len);
   }
 
   // Greedy minimal cover: biggest decks first, drop any that cover no new water.
@@ -547,21 +550,23 @@ function buildLandmarks(): LandmarkDef[] {
 export const LANDMARK_POS = N;
 
 export function buildParis(): CityData {
+  const roads = ROADS.map((r, i) => ({
+    name: `ave-${i}`,
+    points: [{ x: r.from.x, z: r.from.z }, { x: r.to.x, z: r.to.z }],
+    width: r.width,
+  }));
+  const river = { points: SEINE_POINTS, width: SEINE_WIDTH };
   return {
     bounds: { ...MAP_BOUNDS },
-    roads: ROADS.map((r, i) => ({
-      name: `ave-${i}`,
-      points: [{ x: r.from.x, z: r.from.z }, { x: r.to.x, z: r.to.z }],
-      width: r.width,
-    })),
+    roads,
     buildings: buildBuildings(),
     landmarks: buildLandmarks(),
-    river: { points: SEINE_POINTS, width: SEINE_WIDTH },
+    river,
     parks: PARKS,
     trees: buildTrees(),
     boundary: OUTLINE_OUTER, // clamp at the Périph's outer edge
     island: ISLAND,
-    bridges: buildBridges(),
+    bridges: computeBridges(roads, river),
     spawns: [
       { x: N.concorde.x, z: N.concorde.z - 14, rotationY: 0 },
       { x: N.louvre.x, z: N.louvre.z - 16, rotationY: Math.PI },

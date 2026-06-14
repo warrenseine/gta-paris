@@ -3,6 +3,7 @@ export * from './math.js';
 export * from './input.js';
 export * from './map/types.js';
 export * from './map/paris.js';
+export * from './map/loadMap.js';
 export * from './sim/weapons.js';
 export * from './sim/collision.js';
 export * from './sim/water.js';
