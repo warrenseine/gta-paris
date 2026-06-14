@@ -24,6 +24,7 @@ export class InputManager {
   /** Latched aim direction — kept when the right stick is released. */
   private lastAimX = 0;
   private lastAimZ = 1;
+  private lastMouseMove = 0;
 
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -40,6 +41,7 @@ export class InputManager {
       this.mouseNdc.x = (e.clientX / window.innerWidth) * 2 - 1;
       this.mouseNdc.y = -(e.clientY / window.innerHeight) * 2 + 1;
       this.lastDevice = 'kbm';
+      this.lastMouseMove = performance.now();
     });
     dom.addEventListener('mousedown', (e) => {
       if (e.button === 0) this.mouseDown = true;
@@ -153,6 +155,9 @@ export class InputManager {
     // else: gamepad with stick released -> keep last aim (no snap-back).
     cmd.aimX = this.lastAimX;
     cmd.aimZ = this.lastAimZ;
+    // Actively aiming = right stick held, or the mouse moved recently. When not,
+    // the character faces its movement direction instead of the latched aim.
+    cmd.aiming = hasStickAim || performance.now() - this.lastMouseMove < 700;
 
     // --- Look (camera lead): screen-space + player-INDEPENDENT, so walking
     // doesn't pan the view. Only moving the mouse / right stick re-orients. ---

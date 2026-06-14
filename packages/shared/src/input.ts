@@ -12,6 +12,8 @@ export interface InputCommand {
   /** View-look offset in screen space (cursor offset from centre / right stick), -1..1. Client-only (camera). */
   lookX: number;
   lookZ: number;
+  /** True when the player is actively aiming (mouse moved / right stick held). Else face movement. */
+  aiming: boolean;
   fire: boolean;
   enterExit: boolean;
   handbrake: boolean;
@@ -34,6 +36,7 @@ export function emptyInput(seq = 0): InputCommand {
     aimZ: 1,
     lookX: 0,
     lookZ: 0,
+    aiming: false,
     fire: false,
     enterExit: false,
     handbrake: false,

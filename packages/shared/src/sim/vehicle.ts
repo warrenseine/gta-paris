@@ -14,7 +14,7 @@ export interface CarState {
 }
 
 export const CAR = {
-  radius: 2.4, // covers the ~2.2x4.4 body so it can't slip into buildings
+  radius: 2.0, // collision circle (smaller = less "sticky" against walls)
   maxSpeed: 40, // ~145 km/h
   enginePower: 30, // m/s^2 accel
   drag: 0.5,
@@ -64,7 +64,7 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
 
   const resolved = resolveAgainstBuildings({ x, z, r: CAR.radius }, world.buildings);
   if (resolved.x !== x || resolved.z !== z) {
-    speed *= 0.4;
+    speed *= 0.7; // glance off walls instead of slamming to a stop
     x = resolved.x;
     z = resolved.z;
   }

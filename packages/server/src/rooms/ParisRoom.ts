@@ -117,7 +117,7 @@ const PICKUP_RADIUS = 1.6;
 const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
 const CORPSE_TICKS = 7 * TICK_RATE; // how long a dead ped stays on the ground
 const CAR_MAX_HP = 100;
-const CRASH_SPEED = 9; // impact speed above which a collision damages the car
+const CRASH_SPEED = 18; // only hard, fast impacts damage the car
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -451,10 +451,10 @@ export class ParisRoom extends Room<GameState> {
             const before = Math.abs(car.speed);
             const next = stepCar(car, input, DT, world);
             this.cars.set(ps.vehicleId, next);
-            // Sudden speed loss = a crash into a building -> damage.
+            // Only a hard, fast head-on crash damages the car.
             const drop = before - Math.abs(next.speed);
-            if (before > CRASH_SPEED && drop > before * 0.3) {
-              this.damageCar(ps.vehicleId, drop * 3, id);
+            if (before > CRASH_SPEED && drop > before * 0.45) {
+              this.damageCar(ps.vehicleId, drop * 1.2, id);
             }
             sim.foot.x = next.x;
             sim.foot.z = next.z;
@@ -529,18 +529,22 @@ export class ParisRoom extends Room<GameState> {
     this.state.serverTick++;
   }
 
-  /** Cars moving fast enough mow down nearby pedestrians (thrown + killed). */
+  /** Cars hitting people: peds are thrown + killed; players are knocked back + hurt. */
   private resolveRunOver(tickNo: number) {
-    const cars: { x: number; z: number; rotY: number; speed: number }[] = [];
-    for (const [, car] of this.cars) cars.push(car);
-    for (const n of this.npcSims) if (!n.dead && n.kind === NPC_CAR) cars.push(n);
+    const cars: { x: number; z: number; rotY: number; speed: number; driverId: string }[] = [];
+    for (const [vid, car] of this.cars) {
+      cars.push({ ...car, driverId: this.state.vehicles.get(vid)?.driverId ?? '' });
+    }
+    for (const n of this.npcSims) if (!n.dead && n.kind === NPC_CAR) cars.push({ ...n, driverId: '' });
 
     for (const car of cars) {
-      if (Math.abs(car.speed) < 7) continue;
+      const fast = Math.abs(car.speed);
+      if (fast < 6) continue;
+
+      // Pedestrians: thrown + killed.
       for (const ped of this.npcSims) {
         if (ped.dead || ped.kind !== 0) continue;
         if (Math.hypot(ped.x - car.x, ped.z - car.z) > CAR.radius + 0.8) continue;
-        // Throw the body forward along the car's heading, then leave a corpse.
         ped.dead = true;
         ped.x += Math.sin(car.rotY) * 5;
         ped.z += Math.cos(car.rotY) * 5;
@@ -551,6 +555,23 @@ export class ParisRoom extends Room<GameState> {
           ns.z = ped.z;
           ns.dead = true;
         }
+      }
+
+      // On-foot players: knocked back + damaged (lethal if hit hard).
+      for (const [pid, sim] of this.sims) {
+        if (pid === car.driverId) continue;
+        const ps = this.state.players.get(pid);
+        if (!ps || !ps.alive || ps.vehicleId) continue;
+        const reach = CAR.radius + PLAYER.radius;
+        if (Math.hypot(sim.foot.x - car.x, sim.foot.z - car.z) > reach) continue;
+        // Knock the player along the car's heading.
+        sim.foot.x = car.x + Math.sin(car.rotY) * (reach + 1.5);
+        sim.foot.z = car.z + Math.cos(car.rotY) * (reach + 1.5);
+        sim.foot.vx = 0;
+        sim.foot.vz = 0;
+        const dmg = Math.min(60, (fast - 4) * 5);
+        ps.health -= dmg;
+        if (ps.health <= 0) this.killPlayer(pid, car.driverId || pid);
       }
     }
   }

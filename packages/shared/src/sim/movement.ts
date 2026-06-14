@@ -62,9 +62,9 @@ export function stepFoot(s: FootState, input: InputCommand, dt: number, world: M
   x = bounded.x;
   z = bounded.z;
 
-  // Facing: aim direction takes priority (twin-stick), else movement direction.
+  // Facing: while actively aiming, face the aim; otherwise face movement.
   let rotY = s.rotY;
-  if (Math.abs(input.aimX) > 1e-3 || Math.abs(input.aimZ) > 1e-3) {
+  if (input.aiming && (Math.abs(input.aimX) > 1e-3 || Math.abs(input.aimZ) > 1e-3)) {
     rotY = Math.atan2(input.aimX, input.aimZ);
   } else if (mlen > 1e-3) {
     rotY = Math.atan2(vx, vz);

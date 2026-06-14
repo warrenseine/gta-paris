@@ -178,7 +178,7 @@ function buildBuildings(): BuildingDef[] {
     for (let gz = MAP_BOUNDS.minZ + 40; gz < MAP_BOUNDS.maxZ - 40; gz += step) {
       const cx = gx + (rng() - 0.5) * 7;
       const cz = gz + (rng() - 0.5) * 7;
-      if (nearSeine(cx, cz, 6)) continue;
+      if (nearSeine(cx, cz, 10)) continue; // keep quais clear so the river is crossable
       if (nearLandmark(cx, cz, 60)) continue;
       if (inPark(cx, cz, 4)) continue;
       if (onRoad(cx, cz, 4)) continue;
