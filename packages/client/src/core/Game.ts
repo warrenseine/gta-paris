@@ -512,8 +512,8 @@ export class Game {
     this.hud.set({
       health: l?.health ?? 100,
       stamina: this.drivingId ? 100 : (this.footPred.state.stamina / PLAYER.maxStamina) * 100,
-      weapon: isTank ? 'Cannon' : this.drivingId ? 'Driving' : w.name,
-      ammo: isTank ? '∞' : this.drivingId ? '' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
+      weapon: isTank ? 'Cannon' : w.name,
+      ammo: isTank ? '∞' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
       hint: this.drivingId
         ? isTank
           ? `WASD drive · fire cannon · Y exit · ${online} online`

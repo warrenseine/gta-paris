@@ -37,8 +37,9 @@ export class HUD {
     this.root.style.cssText =
       'position:fixed;inset:0;pointer-events:none;font-family:system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);';
 
-    this.health = this.panel('left:18px;bottom:26px;font-size:22px;font-weight:700;');
-    this.stamina = this.panel('left:18px;bottom:14px;width:120px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);');
+    // Bottom-right stack: health + stamina above the weapon/ammo readout.
+    this.health = this.panel('right:18px;bottom:60px;font-size:22px;font-weight:700;text-align:right;');
+    this.stamina = this.panel('right:18px;bottom:50px;width:120px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);');
     this.staminaFill = document.createElement('div');
     this.staminaFill.style.cssText = 'height:100%;width:100%;border-radius:3px;background:#5fd0ff;transition:width .1s;';
     this.stamina.appendChild(this.staminaFill);

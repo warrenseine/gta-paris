@@ -60,7 +60,7 @@ export class Minimap {
 
     this.wrap = document.createElement('div');
     this.wrap.style.cssText =
-      'position:fixed;top:14px;left:14px;z-index:5;border:2px solid rgba(255,255,255,.25);' +
+      'position:fixed;bottom:14px;left:14px;z-index:5;border:2px solid rgba(255,255,255,.25);' +
       'border-radius:8px;overflow:hidden;opacity:.82;transition:opacity .15s;';
     this.canvas.style.cssText = 'display:block;width:210px;height:210px;image-rendering:auto;';
     this.wrap.appendChild(this.canvas);
@@ -87,13 +87,15 @@ export class Minimap {
     if (expanded) {
       const s = Math.min(window.innerWidth, window.innerHeight) * 0.82;
       this.wrap.style.top = '50%';
+      this.wrap.style.bottom = 'auto';
       this.wrap.style.left = '50%';
       this.wrap.style.transform = 'translate(-50%,-50%)';
       this.wrap.style.opacity = '0.94';
       this.canvas.style.width = `${s}px`;
       this.canvas.style.height = `${s}px`;
     } else {
-      this.wrap.style.top = '14px';
+      this.wrap.style.top = 'auto';
+      this.wrap.style.bottom = '14px';
       this.wrap.style.left = '14px';
       this.wrap.style.transform = 'none';
       this.wrap.style.opacity = '0.82';
