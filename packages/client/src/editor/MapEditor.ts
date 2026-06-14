@@ -169,7 +169,7 @@ export class MapEditor {
   };
 
   private onKey = (e: KeyboardEvent) => {
-    if (e.code === 'F2') {
+    if (e.code === 'Backquote' || e.code === 'F2') {
       this.toggle();
       return;
     }
@@ -333,7 +333,7 @@ export class MapEditor {
     const btn = (label: string, on: boolean) =>
       `<span style="padding:3px 8px;border-radius:5px;background:${on ? '#ffcf4d' : 'rgba(255,255,255,.12)'};color:${on ? '#000' : '#fff'}">${label}</span>`;
     this.bar.innerHTML =
-      `<b>MAP EDITOR</b>` +
+      "<b>MAP EDITOR</b><span style='opacity:.7'>(` exit)</span>" +
       `<span>type:</span>` +
       ['building', 'landmark', 'tree', 'road', 'river'].map((k, i) => btn(`${i + 1} ${k}`, this.kind === k)).join('') +
       `<span style="margin-left:10px">mode:</span>` +
