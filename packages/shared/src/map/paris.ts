@@ -59,16 +59,6 @@ interface Seg {
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
 
-// Segment intersection point (or null).
-function segInt(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): Vec2 | null {
-  const d = (p2.x - p1.x) * (p4.z - p3.z) - (p2.z - p1.z) * (p4.x - p3.x);
-  if (Math.abs(d) < 1e-9) return null;
-  const t = ((p3.x - p1.x) * (p4.z - p3.z) - (p3.z - p1.z) * (p4.x - p3.x)) / d;
-  const u = ((p3.x - p1.x) * (p2.z - p1.z) - (p3.z - p1.z) * (p2.x - p1.x)) / d;
-  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
-  return { x: p1.x + t * (p2.x - p1.x), z: p1.z + t * (p2.z - p1.z) };
-}
-
 function pointInPoly(x: number, z: number, poly: Vec2[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -259,32 +249,48 @@ function inPark(x: number, z: number, margin: number): boolean {
   return false;
 }
 
-// A bridge wherever an avenue crosses the Seine (so no road fords open water).
+// Deck EVERY span where ANY road (avenues + the Périphérique) runs over open
+// water, so no road ever fords the Seine. March along each road, find the
+// contiguous wet spans, and lay a deck covering each span plus a bank margin.
 function buildBridges() {
   const out: { x: number; z: number; rotationY: number; length: number; width: number }[] = [];
-  for (const r of ROADS) {
-    if (r.width === PERIPH_WIDTH) continue; // périph rings outside the river
+  const wet = (x: number, z: number) => {
     for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
-      const hit = segInt(r.from, r.to, SEINE_POINTS[i], SEINE_POINTS[i + 1]);
-      if (!hit) continue;
-      const dx = r.to.x - r.from.x;
-      const dz = r.to.z - r.from.z;
-      const rl = Math.hypot(dx, dz) || 1;
-      // Span the water diagonally: a shallow crossing needs a longer deck so the
-      // ends land on dry banks (the deck must reach the road, not float mid-river).
-      const sx = SEINE_POINTS[i + 1].x - SEINE_POINTS[i].x;
-      const sz = SEINE_POINTS[i + 1].z - SEINE_POINTS[i].z;
-      const sl = Math.hypot(sx, sz) || 1;
-      const sinT = Math.abs((dx / rl) * (sz / sl) - (dz / rl) * (sx / sl));
-      const span = SEINE_WIDTH / Math.max(0.35, sinT);
-      out.push({
-        x: hit.x,
-        z: hit.z,
-        rotationY: Math.atan2(-dz, dx), // align the deck's long (X) axis with the road
-        length: Math.min(150, span + 30), // +30 → ~15m onto each bank
-        width: Math.max(r.width + 8, 18),
-      });
+      if (distToSeg(x, z, SEINE_POINTS[i], SEINE_POINTS[i + 1]) < SEINE_WIDTH / 2) return true;
     }
+    return false;
+  };
+  for (const r of ROADS) {
+    const dx = r.to.x - r.from.x;
+    const dz = r.to.z - r.from.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1) continue;
+    const ux = dx / len;
+    const uz = dz / len;
+    const rotationY = Math.atan2(-dz, dx); // deck long (X) axis along the road
+    const width = Math.max(r.width + 8, 18);
+    const steps = Math.max(2, Math.ceil(len / 3));
+    let spanStart = -1;
+    const deck = (d0: number, d1: number) => {
+      const mid = (d0 + d1) / 2;
+      out.push({
+        x: r.from.x + ux * mid,
+        z: r.from.z + uz * mid,
+        rotationY,
+        length: d1 - d0 + 26, // ~13m onto each bank
+        width,
+      });
+    };
+    for (let i = 0; i <= steps; i++) {
+      const d = (len * i) / steps;
+      const isWet = wet(r.from.x + ux * d, r.from.z + uz * d);
+      if (isWet && spanStart < 0) spanStart = d;
+      else if (!isWet && spanStart >= 0) {
+        deck(spanStart, d);
+        spanStart = -1;
+      }
+    }
+    if (spanStart >= 0) deck(spanStart, len);
   }
   return out;
 }
@@ -389,14 +395,63 @@ function buildTrees(): Vec2[] {
   );
 }
 
+// Push a landmark off the roadway so it sits beside the street, not on it.
+// Sums the push from every nearby road; capped so it stays next to its node.
+function offRoad(x: number, z: number): { x: number; z: number } {
+  const CLEAR = 12;
+  const ox = x;
+  const oz = z;
+  for (let it = 0; it < 14; it++) {
+    let sx = 0;
+    let sz = 0;
+    let hits = 0;
+    for (const r of ROADS) {
+      const abx = r.to.x - r.from.x;
+      const abz = r.to.z - r.from.z;
+      const t = Math.max(0, Math.min(1, ((x - r.from.x) * abx + (z - r.from.z) * abz) / (abx * abx + abz * abz || 1)));
+      const dx = x - (r.from.x + abx * t);
+      const dz = z - (r.from.z + abz * t);
+      const d = Math.hypot(dx, dz);
+      const need = r.width / 2 + CLEAR;
+      if (d < need) {
+        if (d < 0.001) {
+          const l = Math.hypot(abx, abz) || 1;
+          sx += (-abz / l) * need;
+          sz += (abx / l) * need;
+        } else {
+          sx += (dx / d) * (need - d);
+          sz += (dz / d) * (need - d);
+        }
+        hits++;
+      }
+    }
+    if (!hits) break;
+    x += sx;
+    z += sz;
+    if (Math.hypot(x - ox, z - oz) > 48) break; // stay next to the node
+  }
+  return { x, z };
+}
+
 function buildLandmarks(): LandmarkDef[] {
-  return LANDMARKS.map((l, id) => ({
-    id,
-    key: l.key,
-    position: { x: l.at.x + (l.off?.x ?? 0), y: l.y ?? 0, z: l.at.z + (l.off?.z ?? 0) },
-    rotationY: l.rotationY ?? 0,
-    scale: 1,
-  }));
+  return LANDMARKS.map((l, id) => {
+    let px = l.at.x + (l.off?.x ?? 0);
+    let pz = l.at.z + (l.off?.z ?? 0);
+    // Keep the Arc centred in its roundabout and Notre-Dame on its island;
+    // nudge the rest off the roadway so they sit beside the street.
+    if (l.key !== 'arcdetriomphe' && l.key !== 'notredame') {
+      const s = offRoad(px, pz);
+      px = s.x;
+      pz = s.z;
+    }
+    return {
+      id,
+      key: l.key,
+      position: { x: px, y: l.y ?? 0, z: pz },
+      rotationY: l.rotationY ?? 0,
+      scale: 1,
+    };
+  });
 }
 
 export const LANDMARK_POS = N;
