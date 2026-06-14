@@ -88,7 +88,7 @@ export class Game {
       bx = Math.max(bx, Math.abs(p.x));
       bz = Math.max(bz, Math.abs(p.z));
     }
-    this.cam.setBounds(bx - 70, bz - 70);
+    this.cam.setBounds(bx - 20, bz - 20); // let the focus reach the Périph (still hides the void)
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.effects = new Effects(this.renderer.scene);
     this.hud = new HUD();
@@ -345,10 +345,10 @@ export class Game {
       }
       lookX = Math.sin(rot); // camera leads toward car heading
       lookZ = Math.cos(rot);
-      // Drive-by: lean the bust out the window while shooting from the car.
+      // Drive-by: lean the bust out the window only while actually shooting.
       const shootingRecently = performance.now() - this.lastShot < 1200;
       const legs = this.playerMesh.userData.walk as { lLeg: THREE.Object3D; rLeg: THREE.Object3D } | undefined;
-      if (!dead && (shootingRecently || this.lockedPos)) {
+      if (!dead && shootingRecently) {
         const aim = this.aimDir();
         const lx = Math.cos(rot); // car's left side (perpendicular to heading)
         const lz = -Math.sin(rot);
