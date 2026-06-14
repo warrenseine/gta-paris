@@ -228,7 +228,49 @@ export class ParisRoom extends Room<GameState> {
   }
 
   private randomSpawn() {
-    return this.city.spawns[Math.floor(Math.random() * this.city.spawns.length)];
+    const sp = this.city.spawns[Math.floor(Math.random() * this.city.spawns.length)];
+    const safe = this.offRoad(sp.x, sp.z); // never drop the player onto a roadway
+    return { x: safe.x, z: safe.z, rotationY: sp.rotationY };
+  }
+
+  /** Nudge a point off every nearby road so spawns don't land in traffic. */
+  private offRoad(x: number, z: number): { x: number; z: number } {
+    const CLEAR = 4; // player radius + margin beyond the kerb
+    for (let iter = 0; iter < 16; iter++) {
+      let sx = 0;
+      let sz = 0;
+      let hits = 0;
+      for (const r of this.city.roads) {
+        for (let i = 0; i < r.points.length - 1; i++) {
+          const a = r.points[i];
+          const b = r.points[i + 1];
+          const abx = b.x - a.x;
+          const abz = b.z - a.z;
+          const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+          const dx = x - (a.x + abx * t);
+          const dz = z - (a.z + abz * t);
+          const d = Math.hypot(dx, dz);
+          const need = r.width / 2 + CLEAR;
+          if (d < need) {
+            if (d < 0.001) {
+              // Dead-centre on the road: pick a deterministic sideways normal.
+              const l = Math.hypot(abx, abz) || 1;
+              sx += (-abz / l) * need;
+              sz += (abx / l) * need;
+            } else {
+              const push = need - d;
+              sx += (dx / d) * push;
+              sz += (dz / d) * push;
+            }
+            hits++;
+          }
+        }
+      }
+      if (!hits) break; // clear of every road
+      x += sx + (sx >= 0 ? 0.5 : -0.5);
+      z += sz + (sz >= 0 ? 0.5 : -0.5);
+    }
+    return { x, z };
   }
 
   onJoin(client: Client, options: { nickname?: string }) {
@@ -725,7 +767,7 @@ export class ParisRoom extends Room<GameState> {
       }
       if (n.kind === NPC_POLICE) this.stepPolice(n);
       else if (n.kind === NPC_COP) this.stepCop(n, tickNo);
-      else if (n.kind === NPC_TANK) this.stepTank(n);
+      else if (n.kind === NPC_TANK) this.stepTank(n, tickNo);
       else stepNpc(n, DT, this.city, tickNo);
       const ns = this.state.npcs.get(n.id);
       if (ns) {
@@ -860,8 +902,8 @@ export class ParisRoom extends Room<GameState> {
   private spawnTankNear(x: number, z: number, targetId: string) {
     if (this.countNpc(NPC_TANK) >= 1) return; // one tank at a time
     const a = Math.random() * Math.PI * 2;
-    const tx = x + Math.cos(a) * 120;
-    const tz = z + Math.sin(a) * 120;
+    const tx = x + Math.cos(a) * 75; // close enough to actually see it roll in
+    const tz = z + Math.sin(a) * 75;
     const n = this.blankNpc(`tank${this.tankCounter++}`, NPC_TANK, tx, tz);
     n.hp = 320;
     n.speed = 0;
@@ -1000,11 +1042,16 @@ export class ParisRoom extends Room<GameState> {
     void tickNo;
   }
 
-  /** Army tank: grind toward the wanted player and lob shells. Idle = carjackable. */
-  private stepTank(n: NpcSimState) {
+  /** Army tank: grind toward the wanted player and lob shells. */
+  private stepTank(n: NpcSimState, tickNo: number) {
     const ps = this.state.players.get(n.targetId);
+    // Stand down and withdraw once the target is gone / no longer wanted, so the
+    // tank slot frees up for the next 5-star spree (otherwise it blocks forever).
     if (!ps || !ps.alive || !this.isWanted(n.targetId)) {
-      n.speed *= 0.9; // stand down, wait to be stolen or for a fresh target
+      n.dead = true;
+      n.noRevive = true;
+      n.respawnAt = tickNo;
+      this.state.npcs.delete(n.id);
       return;
     }
     const dx = ps.x - n.x;
