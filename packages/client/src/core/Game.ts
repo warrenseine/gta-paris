@@ -13,6 +13,7 @@ import {
   type MoveWorld,
   type FireMessage,
   type FireEvent,
+  type ExplosionEvent,
 } from '@gta/shared';
 import { Renderer } from '../render/Renderer.js';
 import { FollowCamera } from '../render/FollowCamera.js';
@@ -94,6 +95,13 @@ export class Game {
       if (fx.hit) this.effects.spark(fx.tx, fx.tz);
       const d = Math.hypot(fx.ox - this.selfX, fx.oz - this.selfZ);
       this.audio.shot(Math.max(0.05, 0.4 * (1 - d / 150)));
+    });
+
+    // Car destroyed -> explosion FX + boom (distance-scaled).
+    conn.room.onMessage(MSG.explosion, (e: ExplosionEvent) => {
+      this.effects.explosion(e.x, e.z);
+      const d = Math.hypot(e.x - this.selfX, e.z - this.selfZ);
+      this.audio.boom(Math.max(0.1, 0.7 * (1 - d / 220)));
     });
 
     // Scoreboard on Tab.

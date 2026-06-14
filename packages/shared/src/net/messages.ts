@@ -5,7 +5,14 @@ export const MSG = {
   input: 'i',
   fire: 'f',
   fireEvent: 'fx',
+  explosion: 'ex',
 } as const;
+
+/** Server -> clients: an explosion to render (destroyed car). */
+export interface ExplosionEvent {
+  x: number;
+  z: number;
+}
 
 export type InputMessage = InputCommand;
 

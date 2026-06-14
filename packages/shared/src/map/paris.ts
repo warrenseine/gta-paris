@@ -3,6 +3,7 @@
 // radiating boulevard grid, with the Seine splitting north/south banks.
 
 import type { CityData, BuildingDef, LandmarkDef } from './types.js';
+import type { Vec2 } from '../math.js';
 import { MAP_BOUNDS } from '../constants.js';
 
 // Deterministic PRNG so client + server build identical cities.
@@ -69,16 +70,37 @@ const BOULEVARDS = [
   { from: LANDMARK_POS.louvre, to: LANDMARK_POS.notredame },
   { from: LANDMARK_POS.arc, to: LANDMARK_POS.eiffel },
 ];
-const ROAD_WIDTH = 16;
+const ROAD_WIDTH = 18; // wide radiating boulevards (the étoile)
+const STREET_WIDTH = 10; // ordinary streets between blocks
+
+interface Seg {
+  from: Vec2;
+  to: Vec2;
+  width: number;
+}
+
+// Boulevards (the radiating star) + a denser grid of streets carving the city
+// into blocks, so it reads like a real street network rather than open ground.
+function buildRoadSegments(): Seg[] {
+  const segs: Seg[] = BOULEVARDS.map((b) => ({ from: { ...b.from }, to: { ...b.to }, width: ROAD_WIDTH }));
+  const lines = [-480, -360, -240, -120, 120, 240, 360, 480];
+  const lo = MAP_BOUNDS.minX + 24;
+  const hi = MAP_BOUNDS.maxX - 24;
+  for (const x of lines) segs.push({ from: { x, z: lo }, to: { x, z: hi }, width: STREET_WIDTH });
+  for (const z of lines) segs.push({ from: { x: lo, z }, to: { x: hi, z }, width: STREET_WIDTH });
+  return segs;
+}
+
+const ROADS = buildRoadSegments();
 
 function onRoad(x: number, z: number, margin: number): boolean {
-  for (const r of BOULEVARDS) {
+  for (const r of ROADS) {
     const abx = r.to.x - r.from.x;
     const abz = r.to.z - r.from.z;
     const t = Math.max(0, Math.min(1, ((x - r.from.x) * abx + (z - r.from.z) * abz) / (abx * abx + abz * abz)));
     const px = r.from.x + abx * t;
     const pz = r.from.z + abz * t;
-    if (Math.hypot(x - px, z - pz) < ROAD_WIDTH / 2 + margin) return true;
+    if (Math.hypot(x - px, z - pz) < r.width / 2 + margin) return true;
   }
   return false;
 }
@@ -87,16 +109,16 @@ function buildBuildings(): BuildingDef[] {
   const rng = mulberry32(0x9a17);
   const buildings: BuildingDef[] = [];
   let id = 0;
-  const step = 34; // block grid spacing
+  const step = 30; // block grid spacing
   for (let gx = MAP_BOUNDS.minX + 40; gx < MAP_BOUNDS.maxX - 40; gx += step) {
     for (let gz = MAP_BOUNDS.minZ + 40; gz < MAP_BOUNDS.maxZ - 40; gz += step) {
       // Jitter within the cell.
-      const cx = gx + (rng() - 0.5) * 10;
-      const cz = gz + (rng() - 0.5) * 10;
+      const cx = gx + (rng() - 0.5) * 8;
+      const cz = gz + (rng() - 0.5) * 8;
       if (nearSeine(cx, cz, 8)) continue;
       if (nearLandmark(cx, cz, 70)) continue;
-      if (onRoad(cx, cz, 6)) continue;
-      if (rng() < 0.12) continue; // courtyards / gaps
+      if (onRoad(cx, cz, 4)) continue;
+      if (rng() < 0.1) continue; // courtyards / gaps
       const hw = 8 + rng() * 6;
       const hd = 8 + rng() * 6;
       // Haussmann: uniform ~18-28m cornice line, slightly taller toward edges.
@@ -139,10 +161,10 @@ function buildLandmarks(): LandmarkDef[] {
 export function buildParis(): CityData {
   return {
     bounds: { ...MAP_BOUNDS },
-    roads: BOULEVARDS.map((b, i) => ({
-      name: `boulevard-${i}`,
-      points: [{ x: b.from.x, z: b.from.z }, { x: b.to.x, z: b.to.z }],
-      width: ROAD_WIDTH,
+    roads: ROADS.map((r, i) => ({
+      name: `road-${i}`,
+      points: [{ x: r.from.x, z: r.from.z }, { x: r.to.x, z: r.to.z }],
+      width: r.width,
     })),
     buildings: buildBuildings(),
     landmarks: buildLandmarks(),

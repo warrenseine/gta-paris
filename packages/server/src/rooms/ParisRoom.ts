@@ -66,6 +66,7 @@ export class NpcState extends Schema {
   @type('number') rotY = 0;
   @type('uint8') kind = 0; // 0 = ped, 1 = car
   @type('uint8') colorId = 0;
+  @type('boolean') dead = false; // corpse on the ground
 }
 
 export class KillEntry extends Schema {
@@ -113,6 +114,7 @@ const RELOAD_TICKS = Math.ceil(1.4 * TICK_RATE);
 const PICKUP_RESPAWN_TICKS = 8 * TICK_RATE;
 const PICKUP_RADIUS = 1.6;
 const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
+const CORPSE_TICKS = 7 * TICK_RATE; // how long a dead ped stays on the ground
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -131,6 +133,7 @@ export class ParisRoom extends Room<GameState> {
     ns.rotY = n.rotY;
     ns.kind = n.kind;
     ns.colorId = n.colorId;
+    ns.dead = n.dead;
     this.state.npcs.set(n.id, ns);
   }
 
@@ -315,8 +318,17 @@ export class ParisRoom extends Room<GameState> {
       npc.hp -= dmg;
       if (npc.hp <= 0) {
         npc.dead = true;
-        npc.respawnAt = this.state.serverTick + (npc.kind === NPC_CAR ? 12 * TICK_RATE : 6 * TICK_RATE);
-        this.state.npcs.delete(npc.id);
+        const ns = this.state.npcs.get(npc.id);
+        if (npc.kind === NPC_CAR) {
+          // Cars explode: FX event + remove immediately, respawn later.
+          this.broadcast(MSG.explosion, { x: npc.x, z: npc.z });
+          npc.respawnAt = this.state.serverTick + 12 * TICK_RATE;
+          this.state.npcs.delete(npc.id);
+        } else {
+          // Pedestrians leave a body on the ground for a while.
+          if (ns) ns.dead = true;
+          npc.respawnAt = this.state.serverTick + CORPSE_TICKS;
+        }
       }
       return;
     }
@@ -447,6 +459,7 @@ export class ParisRoom extends Room<GameState> {
     for (const n of this.npcSims) {
       if (n.dead) {
         if (tickNo >= n.respawnAt) {
+          this.state.npcs.delete(n.id); // clear corpse
           reviveNpc(n, this.city);
           this.addNpcState(n);
         }

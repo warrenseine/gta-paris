@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CityData } from '@gta/shared';
 import { PALETTES } from '@gta/shared';
-import { flat, COLORS } from './materials.js';
+import { flat, buildingMaterial, COLORS } from './materials.js';
 import { buildLandmark } from './landmarks.js';
 
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -97,7 +97,7 @@ export class CityRenderer {
     const scl = new THREE.Vector3();
     for (const [paletteId, arr] of byPalette) {
       const color = PALETTES[paletteId] ?? PALETTES[0];
-      const inst = new THREE.InstancedMesh(UNIT_BOX, flat(color), arr.length);
+      const inst = new THREE.InstancedMesh(UNIT_BOX, buildingMaterial(color), arr.length);
       arr.forEach((b, i) => {
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), b.rotationY);
         pos.set(b.cx, b.height / 2, b.cz);

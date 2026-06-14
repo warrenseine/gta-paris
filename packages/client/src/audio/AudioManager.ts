@@ -40,6 +40,25 @@ export class AudioManager {
     src.stop(t + 0.2);
   }
 
+  /** Explosion: low noise burst + descending tone, scaled by distance. */
+  boom(vol = 0.6) {
+    this.ensure();
+    if (!this.ctx || !this.noise) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    src.connect(lp).connect(g).connect(this.ctx.destination);
+    src.start(t);
+    src.stop(t + 0.6);
+  }
+
   /** Hit confirmation tick. */
   hit() {
     this.ensure();

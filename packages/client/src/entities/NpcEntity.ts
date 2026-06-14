@@ -7,6 +7,7 @@ import { COLORS } from '../render/materials.js';
 export class NpcEntity {
   mesh: THREE.Group;
   kind: number;
+  dead = false;
   interp = new Interpolation();
 
   constructor(scene: THREE.Scene, kind: number, colorId: number) {
@@ -15,7 +16,21 @@ export class NpcEntity {
     scene.add(this.mesh);
   }
 
+  setDead(dead: boolean) {
+    if (dead === this.dead) return;
+    this.dead = dead;
+    if (dead) {
+      // Lie flat on the ground (a body).
+      this.mesh.rotation.x = -Math.PI / 2;
+      this.mesh.position.y = 0.3;
+    } else {
+      this.mesh.rotation.x = 0;
+      this.mesh.position.y = 0;
+    }
+  }
+
   update(now: number) {
+    if (this.dead) return; // frozen corpse
     const s = this.interp.sample(now);
     if (!s) return;
     this.mesh.position.set(s.x, 0, s.z);

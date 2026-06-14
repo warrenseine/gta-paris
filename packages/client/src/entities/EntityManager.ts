@@ -113,7 +113,10 @@ export class EntityManager {
       this.npcs.set(id, ne);
       ne.mesh.position.set(npc.x, 0, npc.z);
       ne.mesh.rotation.y = npc.rotY;
-      $(npc).onChange(() => ne.interp.push(npc.x, npc.z, npc.rotY, performance.now()));
+      $(npc).onChange(() => {
+        ne.setDead(npc.dead);
+        if (!npc.dead) ne.interp.push(npc.x, npc.z, npc.rotY, performance.now());
+      });
     });
     $(state).npcs.onRemove((_npc: any, id: string) => {
       this.npcs.get(id)?.dispose(this.scene);
