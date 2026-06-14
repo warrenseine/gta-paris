@@ -1,4 +1,6 @@
-import { resolveAgainstBuildings, clampToBounds, type CityData, type Vec2 } from '@gta/shared';
+import { resolveAgainstBuildings, clampToBounds, overWater, type CityData, type Vec2, type WaterField } from '@gta/shared';
+
+let WATER: WaterField | null = null; // set on spawn — keeps peds out of the Seine
 
 // Server-authoritative ambient NPCs: pedestrians wander, traffic follows the
 // boulevard polylines. NPCs are cosmetic (no collision with players) to keep
@@ -111,6 +113,7 @@ function roadTrafficSafe(city: CityData, road: { points: Vec2[] }): boolean {
 }
 
 export function spawnNpcs(city: CityData): NpcSimState[] {
+  WATER = { seine: city.river.points, seineWidth: city.river.width, bridges: city.bridges, island: city.island };
   const npcs: NpcSimState[] = [];
   // Roads cars may drive (don't ford the river off-bridge).
   const safe = city.roads.filter((r) => roadTrafficSafe(city, r));
@@ -254,6 +257,11 @@ function stepPed(n: NpcSimState, dt: number, city: CityData, tick: number) {
   px = r.x;
   pz = r.z;
   const b = clampToBounds(px, pz, PED_RADIUS);
+  // Never wade into the Seine: stop at the bank and pick a new target.
+  if (WATER && overWater(b.x, b.z, WATER)) {
+    n.repathAt = tick;
+    return;
+  }
   n.x = b.x;
   n.z = b.z;
 }
