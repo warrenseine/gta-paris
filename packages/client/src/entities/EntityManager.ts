@@ -17,6 +17,7 @@ export interface LocalPlayerFields {
   stamina: number;
   wanted: boolean;
   stars: number;
+  killedBy: string;
   alive: boolean;
   weaponId: number;
   ammo: number;
@@ -67,6 +68,7 @@ export class EntityManager {
             stamina: player.stamina,
             wanted: player.wanted,
             stars: player.stars,
+            killedBy: player.killedBy,
             alive: player.alive,
             weaponId: player.weaponId,
             ammo: player.ammo,

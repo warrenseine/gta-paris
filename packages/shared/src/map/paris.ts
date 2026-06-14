@@ -30,7 +30,7 @@ const N = {
   madeleine: { x: -120, z: -95 },
   opera: { x: -45, z: -120 },
   monceau: { x: -250, z: -245 },
-  louvre: { x: 55, z: 5 },
+  louvre: { x: 72, z: 6 }, // north bank, right beside the Tuileries (kept off the river)
   rivoliW: { x: -95, z: -20 }, // straight rue de Rivoli along the Tuileries' north edge
   rivoliE: { x: 40, z: -20 },
   chatelet: { x: 120, z: 35 },
@@ -213,7 +213,7 @@ const SEINE_WIDTH = 46;
 
 const PARKS: ParkDef[] = [
   { name: 'Jardin des Tuileries', cx: -28, cz: 2, hw: 62, hd: 16 }, // just south of the straight rue de Rivoli (z=-20)
-  { name: 'Champ de Mars', cx: -300, cz: 165, hw: 28, hd: 70 },
+  { name: 'Champ de Mars', cx: -225, cz: 108, hw: 60, hd: 18 }, // between the Eiffel Tower and Invalides
   { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
   { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
   { name: 'Buttes-Chaumont', cx: 320, cz: -245, hw: 50, hd: 45 },
@@ -282,12 +282,12 @@ function buildBridges(): Bridge[] {
     const ux = dx / len;
     const uz = dz / len;
     const rotationY = Math.atan2(-dz, dx); // deck long (X) axis along the road
-    const width = Math.max(r.width + 8, 18);
+    const width = Math.max(r.width + 2, 12); // slim ribbon matching the road (not a slab)
     const steps = Math.max(2, Math.ceil(len / 3));
     let spanStart = -1;
     const deck = (d0: number, d1: number) => {
       const mid = (d0 + d1) / 2;
-      cands.push({ x: r.from.x + ux * mid, z: r.from.z + uz * mid, rotationY, length: d1 - d0 + 26, width });
+      cands.push({ x: r.from.x + ux * mid, z: r.from.z + uz * mid, rotationY, length: d1 - d0 + 14, width });
     };
     for (let i = 0; i <= steps; i++) {
       const d = (len * i) / steps;
@@ -426,40 +426,49 @@ function buildTrees(): Vec2[] {
   );
 }
 
-// Push a landmark off the roadway so it sits beside the street, not on it.
-// Sums the push from every nearby road; capped so it stays next to its node.
+// Push a landmark off the roadway (and out of the Seine) so it sits beside the
+// street on dry land. Sums pushes from nearby roads + the river; capped so it
+// stays next to its node.
 function offRoad(x: number, z: number): { x: number; z: number } {
   const CLEAR = 12;
   const ox = x;
   const oz = z;
-  for (let it = 0; it < 14; it++) {
-    let sx = 0;
-    let sz = 0;
-    let hits = 0;
-    for (const r of ROADS) {
-      const abx = r.to.x - r.from.x;
-      const abz = r.to.z - r.from.z;
-      const t = Math.max(0, Math.min(1, ((x - r.from.x) * abx + (z - r.from.z) * abz) / (abx * abx + abz * abz || 1)));
-      const dx = x - (r.from.x + abx * t);
-      const dz = z - (r.from.z + abz * t);
-      const d = Math.hypot(dx, dz);
-      const need = r.width / 2 + CLEAR;
-      if (d < need) {
-        if (d < 0.001) {
-          const l = Math.hypot(abx, abz) || 1;
-          sx += (-abz / l) * need;
-          sz += (abx / l) * need;
-        } else {
-          sx += (dx / d) * (need - d);
-          sz += (dz / d) * (need - d);
-        }
-        hits++;
+  const pushFrom = (
+    ax: number,
+    az: number,
+    bx: number,
+    bz: number,
+    need: number,
+    acc: { sx: number; sz: number; hits: number },
+  ) => {
+    const abx = bx - ax;
+    const abz = bz - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / (abx * abx + abz * abz || 1)));
+    const dx = x - (ax + abx * t);
+    const dz = z - (az + abz * t);
+    const d = Math.hypot(dx, dz);
+    if (d < need) {
+      if (d < 0.001) {
+        const l = Math.hypot(abx, abz) || 1;
+        acc.sx += (-abz / l) * need;
+        acc.sz += (abx / l) * need;
+      } else {
+        acc.sx += (dx / d) * (need - d);
+        acc.sz += (dz / d) * (need - d);
       }
+      acc.hits++;
     }
-    if (!hits) break;
-    x += sx;
-    z += sz;
-    if (Math.hypot(x - ox, z - oz) > 48) break; // stay next to the node
+  };
+  for (let it = 0; it < 16; it++) {
+    const acc = { sx: 0, sz: 0, hits: 0 };
+    for (const r of ROADS) pushFrom(r.from.x, r.from.z, r.to.x, r.to.z, r.width / 2 + CLEAR, acc);
+    for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
+      pushFrom(SEINE_POINTS[i].x, SEINE_POINTS[i].z, SEINE_POINTS[i + 1].x, SEINE_POINTS[i + 1].z, SEINE_WIDTH / 2 + CLEAR, acc);
+    }
+    if (!acc.hits) break;
+    x += acc.sx;
+    z += acc.sz;
+    if (Math.hypot(x - ox, z - oz) > 60) break; // stay next to the node
   }
   return { x, z };
 }
@@ -468,9 +477,9 @@ function buildLandmarks(): LandmarkDef[] {
   return LANDMARKS.map((l, id) => {
     let px = l.at.x + (l.off?.x ?? 0);
     let pz = l.at.z + (l.off?.z ?? 0);
-    // Keep the Arc centred in its roundabout and Notre-Dame on its island;
-    // nudge the rest off the roadway so they sit beside the street.
-    if (l.key !== 'arcdetriomphe' && l.key !== 'notredame') {
+    // Arc stays centred in its roundabout, Notre-Dame on its island, and the
+    // (large) Louvre is hand-placed beside the Tuileries; nudge the rest.
+    if (l.key !== 'arcdetriomphe' && l.key !== 'notredame' && l.key !== 'louvre') {
       const s = offRoad(px, pz);
       px = s.x;
       pz = s.z;

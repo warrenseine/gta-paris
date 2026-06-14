@@ -9,6 +9,7 @@ export interface HudState {
   deaths: number;
   dead: boolean;
   respawnIn: number;
+  killedBy: string; // who/what wasted us
   stars: number; // wanted level 0..5
 }
 
@@ -85,8 +86,11 @@ export class HUD {
 
     if (s.dead) {
       this.overlay.style.display = 'flex';
+      const by = s.killedBy
+        ? `<div style="font-size:22px;font-weight:600;margin-top:14px;opacity:.95">killed by ${esc(s.killedBy)}</div>`
+        : '';
       this.overlay.innerHTML =
-        `WASTED<div style="font-size:18px;font-weight:500;margin-top:10px;opacity:.85">` +
+        `WASTED${by}<div style="font-size:18px;font-weight:500;margin-top:10px;opacity:.85">` +
         `respawn in ${Math.ceil(s.respawnIn)}s</div>`;
     } else {
       this.overlay.style.display = 'none';

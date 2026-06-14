@@ -48,16 +48,17 @@ function frustum(rBottom: number, rTop: number, h: number, color: number, y: num
 
 function eiffel(): THREE.Group {
   const g = new THREE.Group();
-  // Four distinct splayed legs that lean inward and meet under the platform.
-  const legLen = 50;
-  const corner = 14;
+  const IRON = 0x9c6038; // puddle-iron brownish-red
+  // Four slim, well-spaced splayed legs leaning inward to meet under the platform.
+  const legLen = 52;
+  const corner = 19;
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(5.5, legLen, 5.5), flat(ZINC));
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(3.4, legLen, 3.4), flat(IRON));
       leg.geometry.translate(0, legLen / 2, 0); // pivot at the foot
       leg.position.set(sx * corner, 0, sz * corner);
-      leg.rotation.z = sx * 0.22; // lean the top toward the centre
-      leg.rotation.x = -sz * 0.22;
+      leg.rotation.z = sx * 0.27; // lean the top toward the centre
+      leg.rotation.x = -sz * 0.27;
       g.add(leg);
     }
   }
@@ -68,17 +69,17 @@ function eiffel(): THREE.Group {
     [corner, 0, Math.PI / 2],
     [-corner, 0, Math.PI / 2],
   ] as const) {
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 2), flat(0x6a7079));
+    const arch = new THREE.Mesh(new THREE.BoxGeometry(26, 7, 1.6), flat(0x7a4a30));
     arch.position.set(ax, 22, az);
     arch.rotation.y = ry;
     g.add(arch);
   }
-  g.add(box(40, 4, 40, ZINC, 0, 46)); // first platform
-  g.add(frustum(15, 8, 56, ZINC, 76)); // mid section
-  g.add(box(20, 3, 20, ZINC, 0, 106)); // second platform
-  g.add(frustum(6, 2, 70, ZINC, 142)); // upper
-  g.add(cyl(1.6, 24, ZINC, 0, 189, 0, 6)); // mast
-  g.add(cone(1.4, 8, ZINC, 0, 205, 0, 6)); // tip
+  g.add(box(34, 3.5, 34, IRON, 0, 48)); // first platform
+  g.add(frustum(11, 5.5, 56, IRON, 78)); // mid section (slimmer)
+  g.add(box(13, 2.5, 13, IRON, 0, 107)); // second platform (narrower)
+  g.add(frustum(5, 1.6, 70, IRON, 143)); // upper
+  g.add(cyl(1.3, 24, IRON, 0, 190, 0, 6)); // mast
+  g.add(cone(1.2, 8, IRON, 0, 206, 0, 6)); // tip
   return g;
 }
 
@@ -105,24 +106,24 @@ function louvre(): THREE.Group {
     // z-fighting); eaves overhang slightly.
     g.add(box(w + 1.5, 3, d + 1.5, ROOF, x, h, z));
   };
-  wing(16, 16, 58, 22, 0); // east wing (back of the U)
-  wing(52, 15, 15, -3, -22); // north wing
-  wing(52, 15, 15, -3, 22); // south wing
+  wing(14, 16, 34, 26, 0); // east wing (back of the U)
+  wing(54, 15, 12, -2, -14); // north wing
+  wing(54, 15, 12, -2, 14); // south wing
 
   // Pavilions: taller corner/central blocks with pointed pavilion roofs (the
-  // château silhouette).
+  // château silhouette). Shallow N-S so it fits between the river and Rivoli.
   const pav = (x: number, z: number) => {
-    g.add(box(15, 22, 15, STONE, x, 11, z));
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(11, 9, 4), flat(ROOF));
+    g.add(box(13, 22, 13, STONE, x, 11, z));
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(10, 8, 4), flat(ROOF));
     cap.rotation.y = Math.PI / 4;
-    cap.position.set(x, 26, z);
+    cap.position.set(x, 25, z);
     g.add(cap);
   };
-  pav(28, -22); // four corner pavilions
-  pav(28, 22);
-  pav(-28, -22);
-  pav(-28, 22);
-  pav(28, 0); // central pavilion on the back wing
+  pav(26, -14); // four corner pavilions
+  pav(26, 14);
+  pav(-26, -14);
+  pav(-26, 14);
+  pav(26, 0); // central pavilion on the back wing
 
   const pyr = new THREE.Mesh(new THREE.ConeGeometry(7, 11, 4), flat(0x9fd0e0));
   pyr.rotation.y = Math.PI / 4;

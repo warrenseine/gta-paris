@@ -52,6 +52,7 @@ export class PlayerState extends Schema {
   @type('boolean') alive = true;
   @type('boolean') wanted = false;
   @type('uint8') stars = 0; // wanted level 0..5
+  @type('string') killedBy = ''; // who/what wasted us (shown on the death screen)
   @type('number') weaponId = 1;
   @type('number') ammo = 12;
   @type('number') kills = 0;
@@ -588,7 +589,7 @@ export class ParisRoom extends Room<GameState> {
     }
   }
 
-  private killPlayer(victimId: string, killerId: string) {
+  private killPlayer(victimId: string, killerId: string, cause = '') {
     const victim = this.state.players.get(victimId);
     if (!victim || !victim.alive) return;
     victim.health = 0;
@@ -596,6 +597,7 @@ export class ParisRoom extends Room<GameState> {
     victim.deaths++;
     this.stars.delete(victimId); // wasted — heat clears
     const killer = this.state.players.get(killerId);
+    victim.killedBy = cause || this.killCause(killerId, victimId);
     if (killer && killerId !== victimId) killer.kills++;
     const vScore = this.state.scores.get(victimId);
     if (vScore) vScore.deaths++;
@@ -609,6 +611,17 @@ export class ParisRoom extends Room<GameState> {
     const sim = this.sims.get(victimId);
     if (sim) sim.respawnAtTick = this.state.serverTick + RESPAWN_TICKS;
     this.pushKill(killer?.nickname ?? '?', victim.nickname);
+  }
+
+  /** Human-readable killer for the death screen, derived from the killer id. */
+  private killCause(killerId: string, victimId: string): string {
+    const k = this.state.players.get(killerId);
+    if (k && killerId !== victimId) return k.nickname;
+    if (killerId.startsWith('tank')) return 'an Army Tank';
+    if (killerId.startsWith('cop') || killerId.startsWith('pol')) return 'the Police';
+    if (killerId.startsWith('traffic') || killerId.startsWith('car') || killerId.startsWith('vj'))
+      return 'a hit-and-run';
+    return 'the streets of Paris';
   }
 
   /** Damage a player vehicle; explode (killing the driver) at 0 hp. */
@@ -652,6 +665,7 @@ export class ParisRoom extends Room<GameState> {
     ps.rotY = sp.rotationY;
     ps.health = PLAYER.maxHealth;
     ps.alive = true;
+    ps.killedBy = '';
     ps.weaponId = 1;
     ps.ammo = weapon(1).magazine;
     ps.vehicleId = '';
@@ -710,7 +724,7 @@ export class ParisRoom extends Room<GameState> {
             // Sinking in the Seine: the driver drowns unless they bail out.
             if (overWater(next.x, next.z, this.water)) {
               ps.health -= PLAYER.drownDps * DT;
-              if (ps.health <= 0) this.killPlayer(id, id);
+              if (ps.health <= 0) this.killPlayer(id, id, 'drowning');
             }
           }
         } else {
@@ -847,7 +861,7 @@ export class ParisRoom extends Room<GameState> {
         sim.foot.vz = 0;
         const dmg = Math.min(60, (fast - 4) * 5);
         ps.health -= dmg;
-        if (ps.health <= 0) this.killPlayer(pid, car.driverId || pid);
+        if (ps.health <= 0) this.killPlayer(pid, car.driverId || 'traffic'); // player driver name, else hit-and-run
       }
     }
   }
@@ -1045,7 +1059,7 @@ export class ParisRoom extends Room<GameState> {
         tx = ps.x + (-dz / d) * off; // veer the shot sideways
         tz = ps.z + (dx / d) * off;
       } else {
-        this.applyDamage('', n.targetId, COP_DAMAGE);
+        this.applyDamage(n.id, n.targetId, COP_DAMAGE); // n.id starts 'cop' -> "the Police"
       }
       this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx, tz, hit: !miss, weaponId: 1 });
     }

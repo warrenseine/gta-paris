@@ -525,6 +525,7 @@ export class Game {
       deaths: l?.deaths ?? 0,
       dead,
       respawnIn,
+      killedBy: l?.killedBy ?? '',
       stars: l?.stars ?? 0,
     });
 
