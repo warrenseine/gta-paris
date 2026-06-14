@@ -48,13 +48,13 @@ function frustum(rBottom: number, rTop: number, h: number, color: number, y: num
 
 function eiffel(): THREE.Group {
   const g = new THREE.Group();
-  const IRON = 0x9c6038; // puddle-iron brownish-red
-  // Four slim, well-spaced splayed legs leaning inward to meet under the platform.
+  const IRON = 0x6f4e2e; // puddle-iron brown
+  // Four splayed legs leaning inward to meet under the platform.
   const legLen = 52;
   const corner = 19;
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(3.4, legLen, 3.4), flat(IRON));
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(4.4, legLen, 4.4), flat(IRON));
       leg.geometry.translate(0, legLen / 2, 0); // pivot at the foot
       leg.position.set(sx * corner, 0, sz * corner);
       leg.rotation.z = sx * 0.27; // lean the top toward the centre
@@ -69,14 +69,14 @@ function eiffel(): THREE.Group {
     [corner, 0, Math.PI / 2],
     [-corner, 0, Math.PI / 2],
   ] as const) {
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(26, 7, 1.6), flat(0x7a4a30));
+    const arch = new THREE.Mesh(new THREE.BoxGeometry(26, 7, 1.6), flat(0x5b3d22));
     arch.position.set(ax, 22, az);
     arch.rotation.y = ry;
     g.add(arch);
   }
-  g.add(box(34, 3.5, 34, IRON, 0, 48)); // first platform
-  g.add(frustum(11, 5.5, 56, IRON, 78)); // mid section (slimmer)
-  g.add(box(13, 2.5, 13, IRON, 0, 107)); // second platform (narrower)
+  g.add(box(30, 3.5, 30, IRON, 0, 48)); // first platform
+  g.add(frustum(11, 6, 56, IRON, 78)); // mid section
+  g.add(box(9, 2.5, 9, IRON, 0, 107)); // second platform (smaller than the body below)
   g.add(frustum(5, 1.6, 70, IRON, 143)); // upper
   g.add(cyl(1.3, 24, IRON, 0, 190, 0, 6)); // mast
   g.add(cone(1.2, 8, IRON, 0, 206, 0, 6)); // tip

@@ -161,6 +161,7 @@ export class CityRenderer {
     for (const p of city.parks) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(p.hw * 2, p.hd * 2), flat(COLORS.park));
       m.rotation.x = -Math.PI / 2;
+      m.rotation.z = p.rotationY ?? 0; // diagonal parks (Champ de Mars)
       m.position.set(p.cx, 0.02, p.cz);
       this.group.add(m);
     }

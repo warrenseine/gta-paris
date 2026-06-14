@@ -24,6 +24,8 @@ export interface ParkDef {
   cz: number;
   hw: number;
   hd: number;
+  /** Ground rotation (radians) for diagonal parks like the Champ de Mars. */
+  rotationY?: number;
 }
 
 export interface RoadDef {

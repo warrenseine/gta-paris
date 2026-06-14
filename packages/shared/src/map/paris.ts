@@ -24,7 +24,7 @@ const N = {
   trocadero: { x: -380, z: 30 },
   eiffel: { x: -300, z: 110 },
   champdemars: { x: -300, z: 175 },
-  invalides: { x: -150, z: 95 },
+  invalides: { x: -155, z: 140 },
   grandpalais: { x: -210, z: 5 },
   concorde: { x: -120, z: -35 },
   madeleine: { x: -120, z: -95 },
@@ -219,7 +219,7 @@ const SEINE_WIDTH = 46;
 
 const PARKS: ParkDef[] = [
   { name: 'Jardin des Tuileries', cx: -28, cz: 2, hw: 62, hd: 16 }, // just south of the straight rue de Rivoli (z=-20)
-  { name: 'Champ de Mars', cx: -300, cz: 148, hw: 24, hd: 44 }, // long lawn south of the Eiffel toward the École Militaire
+  { name: 'Champ de Mars', cx: -262, cz: 152, hw: 20, hd: 46, rotationY: Math.PI / 4 }, // diagonal lawn NW-SE, Eiffel -> École Militaire
   { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
   { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
   { name: 'Buttes-Chaumont', cx: 320, cz: -245, hw: 50, hd: 45 },
@@ -336,7 +336,7 @@ function buildBridges(): Bridge[] {
 // sits beside the street, not on it (the node stays put for road connectivity).
 const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number; off?: Vec2; rotationY?: number }[] = [
   { key: 'arcdetriomphe', at: N.etoile },
-  { key: 'eiffel', at: N.eiffel },
+  { key: 'eiffel', at: N.eiffel, rotationY: Math.PI / 4 }, // aligned NW-SE with the Champ de Mars
   { key: 'louvre', at: N.louvre },
   { key: 'notredame', at: N.notredame },
   { key: 'sacrecoeur', at: N.sacrecoeur },
