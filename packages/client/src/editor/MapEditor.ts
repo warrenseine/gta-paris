@@ -29,6 +29,7 @@ export class MapEditor {
   private camCenter = new THREE.Vector3(0, 0, 0);
   private viewSize = 700;
   private autoBridges = true; // recompute bridges from roads until you edit one
+  private pendingRoad: { x: number; z: number } | null = null; // first click of a new road
   private bar: HTMLDivElement;
   private dom: HTMLCanvasElement;
 
@@ -218,10 +219,12 @@ export class MapEditor {
   private setKind(k: Kind) {
     this.kind = k;
     this.sel = null;
+    this.pendingRoad = null;
     this.marker.visible = false;
   }
   private setMode(m: 'select' | 'add' | 'delete') {
     this.mode = m;
+    this.pendingRoad = null;
   }
 
   private pick(x: number, z: number) {
@@ -333,6 +336,21 @@ export class MapEditor {
     } else if (this.kind === 'bridge') {
       this.city.bridges.push({ x, z, rotationY: 0, length: 60, width: 18 });
       this.autoBridges = false;
+    } else if (this.kind === 'road') {
+      // First click sets the start; second click lays the segment.
+      if (!this.pendingRoad) {
+        this.pendingRoad = { x, z };
+        this.marker.visible = true;
+        this.marker.position.set(x, 2, z);
+        return;
+      }
+      this.city.roads.push({
+        name: `road-${this.city.roads.length}`,
+        points: [{ ...this.pendingRoad }, { x, z }],
+        width: 12,
+      });
+      this.pendingRoad = null;
+      this.recomputeBridges();
     } else return;
     this.rebuild();
   }
