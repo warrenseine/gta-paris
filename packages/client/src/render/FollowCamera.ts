@@ -16,6 +16,8 @@ export class FollowCamera {
   private seeded = false;
   private occBoost = 0; // eased 0..1 — rises when the player is occluded
   private occTarget = 0;
+  private zoom = 0; // eased 0..1 — L1 zoom-out
+  private zoomTarget = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.5, 2000);
@@ -31,11 +33,17 @@ export class FollowCamera {
     this.occTarget = occluded ? 1 : 0;
   }
 
+  /** L1: pull the camera way out for a tactical view. */
+  setZoomedOut(zoomed: boolean) {
+    this.zoomTarget = zoomed ? 1 : 0;
+  }
+
   /** target = player ground position; aim = unit view-orientation vector. */
   update(tx: number, tz: number, dt: number, aimX = 0, aimZ = 0) {
     this.occBoost += (this.occTarget - this.occBoost) * (1 - Math.exp(-5 * dt));
+    this.zoom += (this.zoomTarget - this.zoom) * (1 - Math.exp(-6 * dt));
     const pitch = ((CAMERA.pitchDeg + this.occBoost * 27) * Math.PI) / 180; // toward ~89deg (near top-down)
-    const distance = CAMERA.distance + this.occBoost * 22;
+    const distance = (CAMERA.distance + this.occBoost * 22) * (1 + this.zoom * 4); // up to ~5x out
     const horiz = Math.cos(pitch) * distance;
     const vert = Math.sin(pitch) * distance;
 

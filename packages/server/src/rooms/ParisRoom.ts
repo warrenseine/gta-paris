@@ -28,6 +28,7 @@ import {
   reviveNpc,
   stepPoliceCar,
   NPC_CAR,
+  NPC_PED,
   NPC_COP,
   NPC_POLICE,
   type NpcSimState,
@@ -664,14 +665,14 @@ export class ParisRoom extends Room<GameState> {
       const fast = Math.abs(car.speed);
       if (fast < 6) continue;
 
-      // Pedestrians: thrown + killed.
+      // Pedestrians and cops: thrown + killed.
       for (const ped of this.npcSims) {
-        if (ped.dead || ped.kind !== 0) continue;
+        if (ped.dead || (ped.kind !== NPC_PED && ped.kind !== NPC_COP)) continue;
         if (Math.hypot(ped.x - car.x, ped.z - car.z) > CAR.radius + 0.8) continue;
         ped.dead = true;
         ped.x += Math.sin(car.rotY) * 5;
         ped.z += Math.cos(car.rotY) * 5;
-        ped.respawnAt = tickNo + CORPSE_TICKS;
+        ped.respawnAt = ped.kind === NPC_COP ? Number.MAX_SAFE_INTEGER : tickNo + CORPSE_TICKS;
         const ns = this.state.npcs.get(ped.id);
         if (ns) {
           ns.x = ped.x;

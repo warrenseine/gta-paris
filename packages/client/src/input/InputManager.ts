@@ -77,6 +77,7 @@ export class InputManager {
     let sprint = false;
     let mapToggle = false;
     let mapHold = false;
+    let zoomOut = false;
 
     const pad = this.pollGamepad();
     if (pad) {
@@ -102,6 +103,7 @@ export class InputManager {
       if (pad.buttons[0]?.pressed) sprint = true; // A (hold to sprint)
       // L2 held = show the full map (released = hide).
       if ((pad.buttons[6]?.value ?? 0) > 0.4 || (pad.buttons[6]?.pressed ?? false)) mapHold = true;
+      if (pad.buttons[4]?.pressed) zoomOut = true; // L1 held = zoom out
     }
 
     // Keyboard movement (additive; overrides if pressed).
@@ -135,6 +137,7 @@ export class InputManager {
     cmd.fire = fire;
     cmd.mapToggle = mapToggle;
     cmd.mapHold = mapHold;
+    cmd.zoomOut = zoomOut || this.keys.has('KeyQ');
 
     // --- Aim --- (latched: keep the last orientation when no fresh aim input)
     if (hasStickAim) {

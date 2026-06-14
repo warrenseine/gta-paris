@@ -4,7 +4,7 @@
 
 import type { CityData, BuildingDef, LandmarkDef, ParkDef, LandmarkKey } from './types.js';
 import type { Vec2 } from '../math.js';
-import { MAP_BOUNDS } from '../constants.js';
+import { MAP_BOUNDS, CITY_RADIUS, PERIPH_WIDTH } from '../constants.js';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -101,13 +101,13 @@ const ROADS = buildAvenues();
 
 // Seine: curving W->E band through the south-centre, past the île (Notre-Dame).
 const SEINE_POINTS: Vec2[] = [
-  { x: -600, z: 80 },
+  { x: -520, z: 130 },
   { x: -340, z: 80 },
   { x: -160, z: 55 },
   { x: 30, z: 55 },
   { x: 150, z: 70 },
   { x: 320, z: 95 },
-  { x: 600, z: 150 },
+  { x: 500, z: 200 },
 ];
 const SEINE_WIDTH = 46;
 
@@ -178,6 +178,8 @@ function buildBuildings(): BuildingDef[] {
     for (let gz = MAP_BOUNDS.minZ + 40; gz < MAP_BOUNDS.maxZ - 40; gz += step) {
       const cx = gx + (rng() - 0.5) * 7;
       const cz = gz + (rng() - 0.5) * 7;
+      // Circular city: nothing past the Périphérique ring.
+      if (Math.hypot(cx, cz) > CITY_RADIUS - PERIPH_WIDTH - 6) continue;
       if (nearSeine(cx, cz, 10)) continue; // keep quais clear so the river is crossable
       if (nearLandmark(cx, cz, 60)) continue;
       if (inPark(cx, cz, 4)) continue;
@@ -185,8 +187,8 @@ function buildBuildings(): BuildingDef[] {
       if (rng() < 0.08) continue;
       const hw = 7 + rng() * 6;
       const hd = 7 + rng() * 6;
-      const edge = Math.max(Math.abs(cx), Math.abs(cz)) / 600;
-      const height = 16 + rng() * 9 + edge * 14;
+      const edge = Math.hypot(cx, cz) / CITY_RADIUS;
+      const height = 16 + rng() * 9 + edge * 12;
       buildings.push({
         id: id++,
         cx,

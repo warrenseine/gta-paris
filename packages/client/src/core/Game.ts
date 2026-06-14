@@ -196,6 +196,7 @@ export class Game {
 
     if (cmd.mapToggle) this.minimap.toggle();
     this.minimap.setHeld(cmd.mapHold);
+    this.cam.setZoomedOut(cmd.zoomOut);
 
     if (!this.alive) {
       this.effects.update(dt);

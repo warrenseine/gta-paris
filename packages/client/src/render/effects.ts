@@ -5,10 +5,33 @@ interface Tracer {
   line: THREE.Line;
   ttl: number;
 }
+interface Burst {
+  mesh: THREE.Mesh;
+  ttl: number;
+  max: number;
+  size: number;
+  spin: number;
+}
 
-// Pooled bullet tracers + hit sparks.
+// Spiky star outline (cartoon explosion shape), flat in XZ.
+function starGeometry(spikes: number, outer: number, inner: number): THREE.ShapeGeometry {
+  const s = new THREE.Shape();
+  for (let i = 0; i <= spikes * 2; i++) {
+    const r = i % 2 ? inner : outer;
+    const a = (i * Math.PI) / spikes;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i === 0) s.moveTo(x, y);
+    else s.lineTo(x, y);
+  }
+  return new THREE.ShapeGeometry(s);
+}
+const STAR = starGeometry(11, 1, 0.52);
+
+// Pooled bullet tracers, sparks, and comic explosions.
 export class Effects {
   private tracers: Tracer[] = [];
+  private bursts: Burst[] = [];
   private group = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
@@ -37,41 +60,61 @@ export class Effects {
     this.tracers.push({ line, ttl: 0.15 });
   }
 
+  private star(x: number, z: number, y: number, color: number, size: number, ttl: number) {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(STAR, mat);
+    mesh.rotation.x = -Math.PI / 2; // lay flat, facing up
+    mesh.position.set(x, y, z);
+    mesh.scale.setScalar(size * 0.3);
+    this.group.add(mesh);
+    this.bursts.push({ mesh, ttl, max: ttl, size, spin: (Math.random() - 0.5) * 4 });
+  }
+
   explosion(x: number, z: number) {
-    // Expanding debris lines + a vertical flash, fading fast.
-    const n = 10;
+    // Comic boom: a big orange star + a yellow core + white flash, popping out.
+    this.star(x, z, 3, 0xff8a1e, 18, 0.55);
+    this.star(x, z, 3.2, 0xffe23a, 11, 0.5);
+    this.star(x, z, 3.4, 0xffffff, 5, 0.32);
+    // Debris streaks.
+    const n = 12;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const r = 5 + Math.random() * 3;
+      const r = 6 + Math.random() * 5;
       const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(x, 1, z),
-        new THREE.Vector3(x + Math.cos(a) * r, 1 + Math.random() * 4, z + Math.sin(a) * r),
+        new THREE.Vector3(x, 1.5, z),
+        new THREE.Vector3(x + Math.cos(a) * r, 1.5 + Math.random() * 6, z + Math.sin(a) * r),
       ]);
-      const mat = new THREE.LineBasicMaterial({ color: i % 2 ? 0xff8a2a : 0xffd23a, transparent: true });
+      const mat = new THREE.LineBasicMaterial({ color: i % 2 ? 0xff6a1e : 0x3a3a3a, transparent: true });
       const line = new THREE.Line(geo, mat);
       this.group.add(line);
-      this.tracers.push({ line, ttl: 0.4 + Math.random() * 0.3 });
+      this.tracers.push({ line, ttl: 0.4 + Math.random() * 0.4 });
     }
-    const flashGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x, 0.2, z),
-      new THREE.Vector3(x, 10, z),
-    ]);
-    const flash = new THREE.Line(flashGeo, new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true }));
-    this.group.add(flash);
-    this.tracers.push({ line: flash, ttl: 0.5 });
   }
 
   update(dt: number) {
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
       t.ttl -= dt;
-      const mat = t.line.material as THREE.LineBasicMaterial;
-      mat.opacity = Math.max(0, t.ttl / 0.1);
+      (t.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, t.ttl / 0.1);
       if (t.ttl <= 0) {
         this.group.remove(t.line);
         t.line.geometry.dispose();
         (t.line.material as THREE.Material).dispose();
         this.tracers.splice(i, 1);
+      }
+    }
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i];
+      b.ttl -= dt;
+      const k = 1 - b.ttl / b.max; // 0 -> 1
+      const pop = 1 - (1 - k) * (1 - k); // ease-out
+      b.mesh.scale.setScalar(b.size * (0.3 + 0.7 * pop));
+      b.mesh.rotation.z += b.spin * dt;
+      (b.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, b.ttl / b.max);
+      if (b.ttl <= 0) {
+        this.group.remove(b.mesh);
+        (b.mesh.material as THREE.Material).dispose();
+        this.bursts.splice(i, 1);
       }
     }
   }

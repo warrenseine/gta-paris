@@ -15,6 +15,10 @@ export const MAP_BOUNDS = {
   maxZ: 600,
 };
 
+/** Paris is circular, ringed by the Périphérique. Movement is clamped to this radius. */
+export const CITY_RADIUS = 560;
+export const PERIPH_WIDTH = 22; // ring-road width at the edge
+
 /** On-foot movement. */
 export const PLAYER = {
   radius: 0.5,

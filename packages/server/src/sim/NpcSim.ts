@@ -1,10 +1,4 @@
-import {
-  resolveAgainstBuildings,
-  clampToBounds,
-  MAP_BOUNDS,
-  type CityData,
-  type Vec2,
-} from '@gta/shared';
+import { resolveAgainstBuildings, clampToBounds, type CityData, type Vec2 } from '@gta/shared';
 
 // Server-authoritative ambient NPCs: pedestrians wander, traffic follows the
 // boulevard polylines. NPCs are cosmetic (no collision with players) to keep
@@ -55,11 +49,37 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
+function distSeg(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const abx = bx - ax;
+  const abz = bz - az;
+  const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / (abx * abx + abz * abz || 1)));
+  return Math.hypot(x - (ax + abx * t), z - (az + abz * t));
+}
+function onRoadNpc(city: CityData, x: number, z: number, margin: number): boolean {
+  for (const r of city.roads) {
+    for (let i = 0; i < r.points.length - 1; i++) {
+      if (distSeg(x, z, r.points[i].x, r.points[i].z, r.points[i + 1].x, r.points[i + 1].z) < r.width / 2 + margin) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function onSeine(city: CityData, x: number, z: number, margin: number): boolean {
+  const p = city.river.points;
+  for (let i = 0; i < p.length - 1; i++) {
+    if (distSeg(x, z, p[i].x, p[i].z, p[i + 1].x, p[i + 1].z) < city.river.width / 2 + margin) return true;
+  }
+  return false;
+}
+
+// A point on a sidewalk: inside the city, not in a building, not on a road or the Seine.
 function walkablePoint(city: CityData): { x: number; z: number } {
-  // Reject points that land inside a building (push-out distance > 0).
-  for (let i = 0; i < 8; i++) {
-    const x = rand(Math.max(MAP_BOUNDS.minX + 30, -PED_AREA), Math.min(MAP_BOUNDS.maxX - 30, PED_AREA));
-    const z = rand(Math.max(MAP_BOUNDS.minZ + 30, -PED_AREA), Math.min(MAP_BOUNDS.maxZ - 30, PED_AREA));
+  for (let i = 0; i < 12; i++) {
+    const x = rand(-PED_AREA, PED_AREA);
+    const z = rand(-PED_AREA, PED_AREA);
+    if (onRoadNpc(city, x, z, 2)) continue;
+    if (onSeine(city, x, z, 4)) continue;
     const r = resolveAgainstBuildings({ x, z, r: PED_RADIUS }, city.buildings);
     if (Math.hypot(r.x - x, r.z - z) < 0.01) return { x, z };
   }

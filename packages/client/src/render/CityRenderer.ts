@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CityData } from '@gta/shared';
-import { PALETTES } from '@gta/shared';
+import { PALETTES, CITY_RADIUS, PERIPH_WIDTH } from '@gta/shared';
 import { flat, buildingMaterials, COLORS } from './materials.js';
 import { buildLandmark } from './landmarks.js';
 
@@ -11,7 +11,7 @@ export class CityRenderer {
   readonly group = new THREE.Group();
 
   constructor(city: CityData) {
-    this.buildGround(city);
+    this.buildGround();
     this.buildParks(city);
     this.buildRoads(city);
     this.buildRiver(city); // after roads so the Seine sits on top where streets cross it
@@ -20,13 +20,34 @@ export class CityRenderer {
     this.buildLandmarks(city);
   }
 
-  private buildGround(city: CityData) {
-    const w = city.bounds.maxX - city.bounds.minX;
-    const d = city.bounds.maxZ - city.bounds.minZ;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(w, d), flat(COLORS.ground));
+  private buildGround() {
+    // Suburbs ring (dark, beyond the Périph) then the circular city ground.
+    const outside = new THREE.Mesh(new THREE.CircleGeometry(CITY_RADIUS + 400, 8), flat(0x2a3326));
+    outside.rotation.x = -Math.PI / 2;
+    outside.position.y = -0.1;
+    this.group.add(outside);
+
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(CITY_RADIUS, 64), flat(COLORS.ground));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set((city.bounds.minX + city.bounds.maxX) / 2, -0.05, (city.bounds.minZ + city.bounds.maxZ) / 2);
+    ground.position.y = -0.05;
     this.group.add(ground);
+
+    // Périphérique: a dark ring road at the city's edge.
+    const periph = new THREE.Mesh(
+      new THREE.RingGeometry(CITY_RADIUS - PERIPH_WIDTH, CITY_RADIUS, 64),
+      flat(COLORS.road),
+    );
+    periph.rotation.x = -Math.PI / 2;
+    periph.position.y = 0.0;
+    this.group.add(periph);
+    // Lane hint line.
+    const line = new THREE.Mesh(
+      new THREE.RingGeometry(CITY_RADIUS - PERIPH_WIDTH / 2 - 0.4, CITY_RADIUS - PERIPH_WIDTH / 2 + 0.4, 64),
+      flat(0x6a6f57),
+    );
+    line.rotation.x = -Math.PI / 2;
+    line.position.y = 0.012;
+    this.group.add(line);
   }
 
   private buildRiver(city: CityData) {

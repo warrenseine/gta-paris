@@ -22,6 +22,8 @@ export interface InputCommand {
   mapToggle: boolean;
   /** Held: show the full map while held (L2). Client-only. */
   mapHold: boolean;
+  /** Held: zoom the camera way out (L1 / Q). Client-only. */
+  zoomOut: boolean;
   /** Throttle/steer for vehicles, derived from move on the client. */
   throttle: number; // -1..1
   steer: number; // -1..1
@@ -43,6 +45,7 @@ export function emptyInput(seq = 0): InputCommand {
     sprint: false,
     mapToggle: false,
     mapHold: false,
+    zoomOut: false,
     throttle: 0,
     steer: 0,
   };

@@ -2,7 +2,7 @@
 // Circle (player/car proxy) vs rotated box (building footprint).
 
 import type { BuildingDef } from '../map/types.js';
-import { MAP_BOUNDS } from '../constants.js';
+import { CITY_RADIUS } from '../constants.js';
 
 export interface Circle {
   x: number;
@@ -83,10 +83,13 @@ export function resolveAgainstBuildings(c: Circle, buildings: BuildingDef[]): Ci
   return { x, z, r: c.r };
 }
 
-/** Clamp inside the map bounds. */
+/** Clamp inside the circular city (the Périphérique ring is the hard boundary). */
 export function clampToBounds(x: number, z: number, r: number): { x: number; z: number } {
-  return {
-    x: Math.max(MAP_BOUNDS.minX + r, Math.min(MAP_BOUNDS.maxX - r, x)),
-    z: Math.max(MAP_BOUNDS.minZ + r, Math.min(MAP_BOUNDS.maxZ - r, z)),
-  };
+  const max = CITY_RADIUS - r;
+  const d = Math.hypot(x, z);
+  if (d > max) {
+    const s = max / d;
+    return { x: x * s, z: z * s };
+  }
+  return { x, z };
 }
