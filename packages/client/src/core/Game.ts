@@ -24,6 +24,7 @@ import { COLORS } from '../render/materials.js';
 import { InputManager } from '../input/InputManager.js';
 import { makePlayerMesh } from '../entities/views.js';
 import { HUD } from '../ui/HUD.js';
+import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
 import type { Connection } from '../net/Connection.js';
 import { Predictor } from '../net/Predictor.js';
@@ -36,6 +37,7 @@ export class Game {
   private input: InputManager;
   private effects: Effects;
   private hud: HUD;
+  private minimap: Minimap;
   private city: CityData;
   private world: MoveWorld;
 
@@ -73,6 +75,7 @@ export class Game {
     this.renderer.scene.add(this.playerMesh);
 
     this.entities = new EntityManager(this.renderer.scene, conn, (p) => this.onLocal(p));
+    this.minimap = new Minimap(this.city);
 
     this.audio.resume();
 
@@ -93,6 +96,9 @@ export class Game {
     });
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Tab') this.scoreboardOpen = false;
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM') this.minimap.toggle();
     });
 
     window.addEventListener('resize', () => this.cam.resize(this.renderer.aspect));
@@ -248,9 +254,31 @@ export class Game {
       lookZ = Math.cos(this.carPred.state.rotY);
     }
     this.cam.update(this.selfX, this.selfZ, frameDt, lookX, lookZ);
+    this.updateMinimap();
 
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);
+  }
+
+  private updateMinimap() {
+    const remotes: { x: number; z: number }[] = [];
+    for (const rp of this.entities.remotes.values()) {
+      if (rp.mesh.visible) remotes.push({ x: rp.mesh.position.x, z: rp.mesh.position.z });
+    }
+    const npcs: { x: number; z: number; kind: number }[] = [];
+    for (const ne of this.entities.npcs.values()) {
+      npcs.push({ x: ne.mesh.position.x, z: ne.mesh.position.z, kind: ne.kind });
+    }
+    const vehicles: { x: number; z: number }[] = [];
+    for (const ve of this.entities.vehicles.values()) {
+      vehicles.push({ x: ve.mesh.position.x, z: ve.mesh.position.z });
+    }
+    const pickups: { x: number; z: number }[] = [];
+    for (const m of this.entities.pickups.values()) {
+      if (m.visible) pickups.push({ x: m.position.x, z: m.position.z });
+    }
+    const rotY = this.drivingId && this.carPred ? this.carPred.state.rotY : this.footPred.state.rotY;
+    this.minimap.update({ px: this.selfX, pz: this.selfZ, rotY, remotes, npcs, vehicles, pickups });
   }
 
   /** Distance to the nearest driver-less car (for the enter prompt). */

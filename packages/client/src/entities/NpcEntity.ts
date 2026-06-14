@@ -6,9 +6,11 @@ import { COLORS } from '../render/materials.js';
 // Ambient NPC (ped or traffic car), interpolated like remote players.
 export class NpcEntity {
   mesh: THREE.Group;
+  kind: number;
   interp = new Interpolation();
 
   constructor(scene: THREE.Scene, kind: number, colorId: number) {
+    this.kind = kind;
     this.mesh = kind === 1 ? makeCarMesh(COLORS.car[colorId % COLORS.car.length]) : makePedMesh(colorId);
     scene.add(this.mesh);
   }

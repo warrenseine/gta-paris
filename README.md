@@ -27,6 +27,7 @@ pnpm dev:server
 - **Enter / exit car**: F / A
 - **Sprint**: Shift / L3 · **Handbrake**: Space / B
 - **Scoreboard**: hold Tab
+- **Map**: M (or the MAP button) toggles the full Paris map
 - Walk over a green box to pick up a weapon.
 
 ## Status — phased build
