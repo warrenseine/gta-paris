@@ -207,6 +207,10 @@ export class MapEditor {
     else if (k === 'e' || k === ']') this.rotateSel(Math.PI / 12);
     else if (k === '-') this.scaleSel(0.9);
     else if (k === '=' || k === '+') this.scaleSel(1.1);
+    else if (k === ',') this.scaleAxis('w', 0.9);
+    else if (k === '.') this.scaleAxis('w', 1.1);
+    else if (k === ';') this.scaleAxis('d', 0.9);
+    else if (k === "'") this.scaleAxis('d', 1.1);
     else if (k === 'x' || e.code === 'Delete' || e.code === 'Backspace') this.deleteSel();
     else if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -326,6 +330,17 @@ export class MapEditor {
     this.rebuild();
   }
 
+  /** Scale only width (x) or only depth (z) — for non-square buildings/parks. */
+  private scaleAxis(dim: 'w' | 'd', f: number) {
+    if (!this.sel) return;
+    const r = this.sel.ref;
+    const k = this.sel.kind;
+    if (k !== 'building' && k !== 'park') return;
+    if (dim === 'w') r.hw *= f;
+    else r.hd *= f;
+    this.rebuild();
+  }
+
   private addAt(x: number, z: number) {
     if (this.kind === 'building') {
       const id = Math.max(0, ...this.city.buildings.map((b) => b.id)) + 1;
@@ -423,7 +438,7 @@ export class MapEditor {
       btn('select', this.mode === 'select') +
       btn('A add', this.mode === 'add') +
       btn('D delete', this.mode === 'delete') +
-      `<span style="margin-left:10px;opacity:.8">drag=move · Q/E rotate · -/= scale · X delete · right-drag/arrows pan · wheel zoom</span>` +
+      `<span style="margin-left:10px;opacity:.8">drag=move · Q/E rotate · -/= scale · ,/. width · ;/' depth · X delete · right-drag/arrows pan · wheel zoom</span>` +
       `<span id="ed-export" style="margin-left:auto;padding:4px 12px;border-radius:5px;background:#39d98a;color:#000;cursor:pointer;pointer-events:auto">Export (⌘S)</span>`;
     const exp = this.bar.querySelector('#ed-export') as HTMLElement;
     exp.onclick = () => void this.exportMap();
