@@ -63,7 +63,7 @@ export function buildingMaterial(color: number): THREE.MeshLambertMaterial {
 export const COLORS = {
   ground: 0x3a4150,
   road: 0x2b2f37,
-  river: 0x2b5d7a,
+  river: 0x3f86b0,
   bridge: 0x6b6f76,
   player: 0xffcf4d,
   remote: 0x5fa8ff,

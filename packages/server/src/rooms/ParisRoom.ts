@@ -475,9 +475,36 @@ export class ParisRoom extends Room<GameState> {
     }
 
     this.resolveCarCollisions();
+    this.resolveRunOver(tickNo);
     this.updatePickups(tickNo);
     this.updateInterest();
     this.state.serverTick++;
+  }
+
+  /** Cars moving fast enough mow down nearby pedestrians (thrown + killed). */
+  private resolveRunOver(tickNo: number) {
+    const cars: { x: number; z: number; rotY: number; speed: number }[] = [];
+    for (const [, car] of this.cars) cars.push(car);
+    for (const n of this.npcSims) if (!n.dead && n.kind === NPC_CAR) cars.push(n);
+
+    for (const car of cars) {
+      if (Math.abs(car.speed) < 7) continue;
+      for (const ped of this.npcSims) {
+        if (ped.dead || ped.kind !== 0) continue;
+        if (Math.hypot(ped.x - car.x, ped.z - car.z) > CAR.radius + 0.8) continue;
+        // Throw the body forward along the car's heading, then leave a corpse.
+        ped.dead = true;
+        ped.x += Math.sin(car.rotY) * 5;
+        ped.z += Math.cos(car.rotY) * 5;
+        ped.respawnAt = tickNo + CORPSE_TICKS;
+        const ns = this.state.npcs.get(ped.id);
+        if (ns) {
+          ns.x = ped.x;
+          ns.z = ped.z;
+          ns.dead = true;
+        }
+      }
+    }
   }
 
   /** Server-side car-vs-car separation (player vehicles + NPC traffic). */

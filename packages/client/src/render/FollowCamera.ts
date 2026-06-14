@@ -14,6 +14,8 @@ export class FollowCamera {
   private leadX = 0;
   private leadZ = 0;
   private seeded = false;
+  private occBoost = 0; // eased 0..1 — rises when the player is occluded
+  private occTarget = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.5, 2000);
@@ -24,11 +26,18 @@ export class FollowCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** When occluded by a building, ramp the camera toward top-down + further out. */
+  setOccluded(occluded: boolean) {
+    this.occTarget = occluded ? 1 : 0;
+  }
+
   /** target = player ground position; aim = unit view-orientation vector. */
   update(tx: number, tz: number, dt: number, aimX = 0, aimZ = 0) {
-    const pitch = (CAMERA.pitchDeg * Math.PI) / 180;
-    const horiz = Math.cos(pitch) * CAMERA.distance;
-    const vert = Math.sin(pitch) * CAMERA.distance;
+    this.occBoost += (this.occTarget - this.occBoost) * (1 - Math.exp(-4 * dt));
+    const pitch = ((CAMERA.pitchDeg + this.occBoost * 22) * Math.PI) / 180; // up to ~84deg
+    const distance = CAMERA.distance + this.occBoost * 30;
+    const horiz = Math.cos(pitch) * distance;
+    const vert = Math.sin(pitch) * distance;
 
     // Ease the aim lead slowly so only deliberate re-orientation pans the view.
     const ak = 1 - Math.exp(-AIM_EASE * dt);

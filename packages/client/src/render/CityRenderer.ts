@@ -12,8 +12,8 @@ export class CityRenderer {
 
   constructor(city: CityData) {
     this.buildGround(city);
-    this.buildRiver(city);
     this.buildRoads(city);
+    this.buildRiver(city); // after roads so the Seine sits on top where streets cross it
     this.buildBuildings(city);
     this.buildLandmarks(city);
   }
@@ -53,8 +53,11 @@ export class CityRenderer {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setIndex(index);
     geo.computeVertexNormals();
-    const river = new THREE.Mesh(geo, flat(COLORS.river));
-    river.position.y = 0.02;
+    // Double-sided: the ribbon's normals can point down, which front-side
+    // culling would hide from the steep top-down camera.
+    const riverMat = new THREE.MeshLambertMaterial({ color: COLORS.river, side: THREE.DoubleSide });
+    const river = new THREE.Mesh(geo, riverMat);
+    river.position.y = 0.06; // clearly above roads/ground
     this.group.add(river);
 
     // Bridges.

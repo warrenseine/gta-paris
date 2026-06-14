@@ -50,6 +50,8 @@ export class Game {
   private local: LocalPlayerFields | null = null;
   private lookX = 0;
   private lookZ = 0;
+  private aimX = 0;
+  private aimZ = 1;
   private fireCd = 0;
   private lockedPos: { x: number; z: number } | null = null;
   private visor: HTMLDivElement;
@@ -180,6 +182,8 @@ export class Game {
     const cmd = this.input.sample(this.cam.camera, this.selfX, this.selfZ);
     this.lookX = cmd.lookX;
     this.lookZ = cmd.lookZ;
+    this.aimX = cmd.aimX;
+    this.aimZ = cmd.aimZ;
     this.fireCd -= dt;
 
     if (cmd.mapToggle) this.minimap.toggle();
@@ -197,22 +201,19 @@ export class Game {
     const wId = this.local?.weaponId ?? 1;
     const ammo = this.local?.ammo ?? 0;
     if (cmd.fire && this.fireCd <= 0 && ammo > 0) {
-      if (this.drivingId && this.carPred) {
-        // Drive-by: auto-aim at the locked target, else fire straight ahead.
-        const t = this.lockedPos;
-        let ax = Math.sin(this.carPred.state.rotY);
-        let az = Math.cos(this.carPred.state.rotY);
-        if (t) {
-          const dx = t.x - this.selfX;
-          const dz = t.z - this.selfZ;
-          const dl = Math.hypot(dx, dz) || 1;
-          ax = dx / dl;
-          az = dz / dl;
-        }
-        this.shoot(cmd.seq, wId, ax, az);
-      } else {
-        this.shoot(cmd.seq, wId, cmd.aimX, cmd.aimZ);
+      // Auto-aim (foot + car): snap to the locked target, else fire along aim.
+      const aim = this.aimDir();
+      let ax = aim.x;
+      let az = aim.z;
+      const t = this.lockedPos;
+      if (t) {
+        const dx = t.x - this.selfX;
+        const dz = t.z - this.selfZ;
+        const dl = Math.hypot(dx, dz) || 1;
+        ax = dx / dl;
+        az = dz / dl;
       }
+      this.shoot(cmd.seq, wId, ax, az);
     }
 
     this.entities.animatePickups(performance.now());
@@ -282,7 +283,6 @@ export class Game {
       this.playerMesh.visible = false;
       lookX = Math.sin(rot); // camera leads toward car heading
       lookZ = Math.cos(rot);
-      this.updateLockOn();
     } else {
       this.footPred.smooth(frameDt);
       camX = this.footPred.renderXAt(alpha);
@@ -290,23 +290,53 @@ export class Game {
       this.playerMesh.position.set(camX, 0, camZ);
       this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
       this.playerMesh.visible = !dead;
+    }
+
+    if (dead) {
       this.lockedPos = null;
       this.visor.style.display = 'none';
+    } else {
+      this.updateAim();
     }
 
     this.entities.update(performance.now(), this.drivingId);
     this.cam.update(camX, camZ, frameDt, lookX, lookZ);
+    this.cam.setOccluded(this.occluded(camX, camZ));
     this.updateMinimap();
     this.updateHud(dead);
     this.renderer.render(this.cam.camera);
   }
 
-  /** Pick the nearest visible enemy within range and place the visor on it. */
-  private updateLockOn() {
+  /** The direction the player is aiming/looking — used to steer auto-aim. */
+  private aimDir(): { x: number; z: number } {
+    if (this.drivingId && this.carPred) {
+      // In a car: right stick / mouse-look steers aim; otherwise aim ahead.
+      if (Math.hypot(this.lookX, this.lookZ) > 0.35) {
+        const l = Math.hypot(this.aimX, this.aimZ) || 1;
+        return { x: this.aimX / l, z: this.aimZ / l };
+      }
+      return { x: Math.sin(this.carPred.state.rotY), z: Math.cos(this.carPred.state.rotY) };
+    }
+    return { x: this.aimX, z: this.aimZ };
+  }
+
+  /**
+   * Auto-aim assist (foot + car): lock the nearest visible enemy that lies in
+   * the aim direction (within a cone), so the right stick / cursor chooses the
+   * target instead of always the closest. Places the visor reticle on it.
+   */
+  private updateAim() {
+    const aim = this.aimDir();
+    const RANGE = 75;
+    const CONE = 0.5; // cos(60deg)
     let best: { x: number; z: number } | null = null;
-    let bd = 75; // lock range (m)
+    let bd = RANGE;
     for (const t of this.hitTargets()) {
-      const d = Math.hypot(t.x - this.selfX, t.z - this.selfZ);
+      const dx = t.x - this.selfX;
+      const dz = t.z - this.selfZ;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.001 || d > RANGE) continue;
+      if ((dx / d) * aim.x + (dz / d) * aim.z < CONE) continue; // outside the aim cone
       if (d < bd) {
         bd = d;
         best = { x: t.x, z: t.z };
@@ -321,6 +351,21 @@ export class Game {
     this.visor.style.display = 'block';
     this.visor.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
     this.visor.style.top = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`;
+  }
+
+  /** True if a building taller than the camera ray occludes the player. */
+  private occluded(px: number, pz: number): boolean {
+    const cam = this.cam.camera.position;
+    for (const s of [0.3, 0.5, 0.7]) {
+      const sx = px + (cam.x - px) * s;
+      const sz = pz + (cam.z - pz) * s;
+      const rayY = 1.5 + (cam.y - 1.5) * s;
+      for (const b of this.city.buildings) {
+        if (b.height <= rayY) continue;
+        if (Math.abs(sx - b.cx) < b.hw + 0.5 && Math.abs(sz - b.cz) < b.hd + 0.5) return true;
+      }
+    }
+    return false;
   }
 
   private updateMinimap() {
