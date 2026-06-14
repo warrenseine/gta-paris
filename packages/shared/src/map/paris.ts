@@ -22,7 +22,7 @@ function mulberry32(seed: number): () => number {
 const N = {
   etoile: { x: -360, z: -150 },
   trocadero: { x: -380, z: 30 },
-  eiffel: { x: -300, z: 110 },
+  eiffel: { x: -285, z: 95 }, // NE, between the Seine bridge and the Champ de Mars
   champdemars: { x: -300, z: 175 },
   invalides: { x: -155, z: 140 },
   grandpalais: { x: -210, z: 5 },
@@ -227,7 +227,7 @@ const PARKS: ParkDef[] = [
   { name: 'Bois de Boulogne', cx: -560, cz: -10, hw: 70, hd: 150 },
   { name: 'Bois de Vincennes', cx: 560, cz: 90, hw: 70, hd: 140 },
   { name: 'Parc des Princes', cx: -430, cz: 250, hw: 32, hd: 26 },
-  { name: 'Place des Vosges', cx: 205, cz: 22, hw: 17, hd: 17 }, // Marais garden square
+  { name: 'Place des Vosges', cx: 210, cz: 0, hw: 13, hd: 13 }, // Marais garden square (frame clears the roads)
 ];
 
 function distToSeg(x: number, z: number, a: Vec2, b: Vec2): number {
