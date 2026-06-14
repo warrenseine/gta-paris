@@ -62,7 +62,7 @@ export class Game {
 
   constructor(container: HTMLElement, private conn: Connection) {
     this.city = buildParis();
-    this.world = { buildings: this.city.buildings, trees: this.city.trees };
+    this.world = { buildings: this.city.buildings, trees: this.city.trees, boundary: this.city.boundary };
     this.renderer = new Renderer(container);
     this.cam = new FollowCamera(this.renderer.aspect);
     this.input = new InputManager(this.renderer.renderer.domElement);

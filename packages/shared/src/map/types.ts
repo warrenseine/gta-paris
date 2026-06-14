@@ -88,6 +88,8 @@ export interface CityData {
   river: RiverDef;
   parks: ParkDef[];
   trees: Vec2[];
+  /** Paris outline polygon (the Périphérique). Movement is clamped inside it. */
+  boundary: Vec2[];
   bridges: { x: number; z: number; rotationY: number; length: number; width: number }[];
   spawns: SpawnPoint[];
   pickups: PickupSpawn[];

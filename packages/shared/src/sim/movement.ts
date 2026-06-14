@@ -19,6 +19,7 @@ export interface FootState {
 export interface MoveWorld {
   buildings: BuildingDef[];
   trees?: { x: number; z: number }[]; // used by vehicles only
+  boundary?: { x: number; z: number }[]; // Paris outline (Périphérique)
 }
 
 /** Advance an on-foot player one fixed step. Pure: returns a new state. */
@@ -59,7 +60,7 @@ export function stepFoot(s: FootState, input: InputCommand, dt: number, world: M
     vx = (resolved.x - s.x) / dt;
     vz = (resolved.z - s.z) / dt;
   }
-  const bounded = clampToBounds(resolved.x, resolved.z, PLAYER.radius);
+  const bounded = clampToBounds(resolved.x, resolved.z, PLAYER.radius, world.boundary);
   x = bounded.x;
   z = bounded.z;
 

@@ -55,33 +55,65 @@ interface Seg {
   width: number;
 }
 
-// Avenues: connect places at real angles. Wide for the grand axes, medium else.
+const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
+
+// Segment intersection point (or null).
+function segInt(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): Vec2 | null {
+  const d = (p2.x - p1.x) * (p4.z - p3.z) - (p2.z - p1.z) * (p4.x - p3.x);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((p3.x - p1.x) * (p4.z - p3.z) - (p3.z - p1.z) * (p4.x - p3.x)) / d;
+  const u = ((p3.x - p1.x) * (p2.z - p1.z) - (p3.z - p1.z) * (p2.x - p1.x)) / d;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { x: p1.x + t * (p2.x - p1.x), z: p1.z + t * (p2.z - p1.z) };
+}
+
+function pointInPoly(x: number, z: number, poly: Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+// The Périphérique outline: an irregular rounded blob (wider E-W), not a circle.
+function buildOutline(): Vec2[] {
+  const rng = mulberry32(0x5a17);
+  const pts: Vec2[] = [];
+  const count = 26;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    const jitter = 0.9 + rng() * 0.16;
+    pts.push({ x: Math.cos(a) * 565 * jitter, z: Math.sin(a) * 495 * jitter });
+  }
+  return pts;
+}
+const OUTLINE = buildOutline();
+
+// Avenues between named places (real-ish angles). Width: grand axes wider.
 const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
-  // Étoile star.
   ['etoile', 'concorde', 20], // Champs-Élysées
   ['etoile', 'trocadero', 14],
   ['etoile', 'grandpalais', 13],
   ['etoile', 'monceau', 13],
   ['etoile', 'invalides', 13],
-  // Rivoli / grand east axis.
-  ['concorde', 'louvre', 16],
+  ['concorde', 'louvre', 16], // Rivoli axis
   ['louvre', 'chatelet', 16],
   ['chatelet', 'hoteldeville', 14],
   ['hoteldeville', 'bastille', 16],
   ['bastille', 'nation', 16],
-  // North boulevards + opera.
   ['concorde', 'madeleine', 13],
   ['madeleine', 'opera', 14],
-  ['opera', 'louvre', 14], // av. de l'Opéra
+  ['opera', 'louvre', 14],
   ['opera', 'republique', 15], // grands boulevards
   ['republique', 'bastille', 14],
   ['republique', 'perelachaise', 13],
   ['opera', 'garedunord', 13],
   ['garedunord', 'sacrecoeur', 12],
   ['garedunord', 'buttes', 12],
-  // South bank.
   ['invalides', 'eiffel', 14],
-  ['trocadero', 'eiffel', 13], // pont d'Iéna axis
+  ['trocadero', 'eiffel', 13],
   ['eiffel', 'champdemars', 12],
   ['invalides', 'saintmichel', 15], // bd Saint-Germain
   ['saintmichel', 'luxembourg', 13],
@@ -92,12 +124,69 @@ const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
   ['notredame', 'pantheon', 12],
   ['bastille', 'garedelyon', 14],
   ['garedelyon', 'nation', 13],
+  ['pantheon', 'montparnasse', 12], // close the Left-Bank loop
+  ['monceau', 'madeleine', 12],
 ];
 
-function buildAvenues(): Seg[] {
-  return AVENUES.map(([a, c, w]) => ({ from: { ...N[a] }, to: { ...N[c] }, width: w }));
+// Build the full network: avenues + dead-end killers + radial links to the
+// Périphérique + the Périphérique loop itself (all drivable, all connected).
+function buildRoads(): Seg[] {
+  const segs: Seg[] = [];
+  const adj = new Map<string, Set<string>>();
+  for (const k of Object.keys(N)) adj.set(k, new Set());
+  const link = (a: keyof typeof N, c: keyof typeof N, w: number) => {
+    if (adj.get(a)!.has(c)) return;
+    adj.get(a)!.add(c);
+    adj.get(c)!.add(a);
+    segs.push({ from: { ...N[a] }, to: { ...N[c] }, width: w });
+  };
+  for (const [a, c, w] of AVENUES) link(a, c, w);
+
+  // No dead ends: any node with <2 links connects to its nearest non-neighbour.
+  const keys = Object.keys(N) as (keyof typeof N)[];
+  for (const k of keys) {
+    let guard = 0;
+    while (adj.get(k)!.size < 2 && guard++ < 4) {
+      let best: keyof typeof N | null = null;
+      let bd = Infinity;
+      for (const o of keys) {
+        if (o === k || adj.get(k)!.has(o)) continue;
+        const d = dist(N[k], N[o]);
+        if (d < bd) {
+          bd = d;
+          best = o;
+        }
+      }
+      if (!best) break;
+      link(k, best, 12);
+    }
+  }
+
+  // Radial avenues out to the nearest Périphérique vertex (so it's reachable).
+  const outer: (keyof typeof N)[] = [
+    'etoile', 'monceau', 'buttes', 'perelachaise', 'nation', 'garedelyon',
+    'montparnasse', 'champdemars', 'trocadero', 'sacrecoeur', 'garedunord', 'bastille',
+  ];
+  for (const k of outer) {
+    let bi = 0;
+    let bd = Infinity;
+    OUTLINE.forEach((p, idx) => {
+      const d = dist(N[k], p);
+      if (d < bd) {
+        bd = d;
+        bi = idx;
+      }
+    });
+    segs.push({ from: { ...N[k] }, to: { ...OUTLINE[bi] }, width: 12 });
+  }
+
+  // The Périphérique ring (a closed loop of road).
+  for (let i = 0; i < OUTLINE.length; i++) {
+    segs.push({ from: { ...OUTLINE[i] }, to: { ...OUTLINE[(i + 1) % OUTLINE.length] }, width: PERIPH_WIDTH });
+  }
+  return segs;
 }
-const ROADS = buildAvenues();
+const ROADS = buildRoads();
 
 // Seine: curving W->E band through the south-centre, past the île (Notre-Dame).
 const SEINE_POINTS: Vec2[] = [
@@ -148,6 +237,28 @@ function inPark(x: number, z: number, margin: number): boolean {
   return false;
 }
 
+// A bridge wherever an avenue crosses the Seine (so no road fords open water).
+function buildBridges() {
+  const out: { x: number; z: number; rotationY: number; length: number; width: number }[] = [];
+  for (const r of ROADS) {
+    if (r.width === PERIPH_WIDTH) continue; // périph rings outside the river
+    for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
+      const hit = segInt(r.from, r.to, SEINE_POINTS[i], SEINE_POINTS[i + 1]);
+      if (!hit) continue;
+      const dx = r.to.x - r.from.x;
+      const dz = r.to.z - r.from.z;
+      out.push({
+        x: hit.x,
+        z: hit.z,
+        rotationY: Math.atan2(-dz, dx), // align the deck's long (X) axis with the road
+        length: SEINE_WIDTH + 20,
+        width: Math.max(r.width + 6, 16),
+      });
+    }
+  }
+  return out;
+}
+
 // Landmarks: position + key. y raised for the ones on higher ground.
 const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number }[] = [
   { key: 'arcdetriomphe', at: N.etoile },
@@ -169,6 +280,14 @@ function nearLandmark(x: number, z: number, margin: number): boolean {
   return false;
 }
 
+function distToBoundary(x: number, z: number): number {
+  let d = Infinity;
+  for (let i = 0, j = OUTLINE.length - 1; i < OUTLINE.length; j = i++) {
+    d = Math.min(d, distToSeg(x, z, OUTLINE[i], OUTLINE[j]));
+  }
+  return d;
+}
+
 function buildBuildings(): BuildingDef[] {
   const rng = mulberry32(0x9a17);
   const buildings: BuildingDef[] = [];
@@ -178,8 +297,9 @@ function buildBuildings(): BuildingDef[] {
     for (let gz = MAP_BOUNDS.minZ + 40; gz < MAP_BOUNDS.maxZ - 40; gz += step) {
       const cx = gx + (rng() - 0.5) * 7;
       const cz = gz + (rng() - 0.5) * 7;
-      // Circular city: nothing past the Périphérique ring.
-      if (Math.hypot(cx, cz) > CITY_RADIUS - PERIPH_WIDTH - 6) continue;
+      // Inside the Périphérique only (with clearance from the ring road).
+      if (!pointInPoly(cx, cz, OUTLINE)) continue;
+      if (distToBoundary(cx, cz) < PERIPH_WIDTH + 10) continue;
       if (nearSeine(cx, cz, 10)) continue; // keep quais clear so the river is crossable
       if (nearLandmark(cx, cz, 60)) continue;
       if (inPark(cx, cz, 4)) continue;
@@ -216,6 +336,7 @@ function buildTrees(): Vec2[] {
     }
   }
   for (const r of ROADS) {
+    if (r.width === PERIPH_WIDTH) continue; // don't line the ring road
     const len = Math.hypot(r.to.x - r.from.x, r.to.z - r.from.z);
     const ux = (r.to.x - r.from.x) / len;
     const uz = (r.to.z - r.from.z) / len;
@@ -227,7 +348,9 @@ function buildTrees(): Vec2[] {
       pts.push({ x: px + uz * off, z: pz - ux * off });
     }
   }
-  return pts.filter((p) => Math.hypot(p.x, p.z) < CITY_RADIUS - PERIPH_WIDTH);
+  return pts.filter(
+    (p) => pointInPoly(p.x, p.z, OUTLINE) && distToBoundary(p.x, p.z) > 5 && !nearSeine(p.x, p.z, 2),
+  );
 }
 
 function buildLandmarks(): LandmarkDef[] {
@@ -255,12 +378,8 @@ export function buildParis(): CityData {
     river: { points: SEINE_POINTS, width: SEINE_WIDTH },
     parks: PARKS,
     trees: buildTrees(),
-    bridges: [
-      { x: -300, z: 80, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
-      { x: 30, z: 55, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
-      { x: 150, z: 70, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
-      { x: 320, z: 95, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
-    ],
+    boundary: OUTLINE,
+    bridges: buildBridges(),
     spawns: [
       { x: N.concorde.x, z: N.concorde.z - 14, rotationY: 0 },
       { x: N.louvre.x, z: N.louvre.z - 16, rotationY: Math.PI },

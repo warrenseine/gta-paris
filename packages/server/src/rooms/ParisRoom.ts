@@ -544,7 +544,7 @@ export class ParisRoom extends Room<GameState> {
 
   private tick() {
     const tickNo = this.state.serverTick;
-    const world = { buildings: this.city.buildings, trees: this.city.trees };
+    const world = { buildings: this.city.buildings, trees: this.city.trees, boundary: this.city.boundary };
 
     for (const [id, sim] of this.sims) {
       const ps = this.state.players.get(id);

@@ -27,6 +27,7 @@ export const CAR = {
 export interface CarWorld {
   buildings: BuildingDef[];
   trees?: Vec2[];
+  boundary?: Vec2[];
 }
 
 const TREE_RADIUS = 1.1;
@@ -80,7 +81,7 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
       z = t.z;
     }
   }
-  const bounded = clampToBounds(x, z, CAR.radius);
+  const bounded = clampToBounds(x, z, CAR.radius, world.boundary);
   x = bounded.x;
   z = bounded.z;
 

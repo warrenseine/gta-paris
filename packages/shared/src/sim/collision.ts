@@ -108,8 +108,47 @@ export function resolveAgainstTrees(
   return { x, z };
 }
 
-/** Clamp inside the circular city (the Périphérique ring is the hard boundary). */
-export function clampToBounds(x: number, z: number, r: number): { x: number; z: number } {
+type Pt = { x: number; z: number };
+
+function pointInPoly(x: number, z: number, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+function nearestOnPoly(x: number, z: number, poly: Pt[]): { px: number; pz: number; d: number } {
+  let best = { px: poly[0].x, pz: poly[0].z, d: Infinity };
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    const abx = b.x - a.x;
+    const abz = b.z - a.z;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+    const px = a.x + abx * t;
+    const pz = a.z + abz * t;
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best.d) best = { px, pz, d };
+  }
+  return best;
+}
+
+/**
+ * Clamp inside the Paris outline polygon (the Périphérique is the hard boundary).
+ * Falls back to a circle if no polygon is supplied.
+ */
+export function clampToBounds(x: number, z: number, r: number, boundary?: Pt[]): { x: number; z: number } {
+  if (boundary && boundary.length > 2) {
+    const inside = pointInPoly(x, z, boundary);
+    const n = nearestOnPoly(x, z, boundary);
+    if (inside && n.d >= r) return { x, z };
+    // Snap to r inside the boundary (centroid ≈ origin -> inward points to origin).
+    const il = Math.hypot(n.px, n.pz) || 1;
+    return { x: n.px - (n.px / il) * r, z: n.pz - (n.pz / il) * r };
+  }
   const max = CITY_RADIUS - r;
   const d = Math.hypot(x, z);
   if (d > max) {

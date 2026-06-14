@@ -78,12 +78,13 @@ function arcdetriomphe(): THREE.Group {
 
 function louvre(): THREE.Group {
   const g = new THREE.Group();
-  g.add(box(120, 22, 26, STONE, 0, 11, -34)); // long wing
-  g.add(box(26, 22, 84, STONE, -47, 11, 12));
-  g.add(box(26, 22, 84, STONE, 47, 11, 12));
-  const pyr = new THREE.Mesh(new THREE.ConeGeometry(13, 20, 4), flat(0x9fd0e0));
+  // U-shaped palace opening south toward the courtyard (smaller, sensible scale).
+  g.add(box(58, 18, 16, STONE, 0, 9, -22)); // north wing
+  g.add(box(16, 18, 46, STONE, -21, 9, 2)); // west wing
+  g.add(box(16, 18, 46, STONE, 21, 9, 2)); // east wing
+  const pyr = new THREE.Mesh(new THREE.ConeGeometry(7, 11, 4), flat(0x9fd0e0));
   pyr.rotation.y = Math.PI / 4;
-  pyr.position.set(0, 10, 18);
+  pyr.position.set(0, 5.5, 4); // glass pyramid in the courtyard
   g.add(pyr);
   return g;
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CityData } from '@gta/shared';
-import { PALETTES, CITY_RADIUS, PERIPH_WIDTH } from '@gta/shared';
+import { PALETTES } from '@gta/shared';
 import { flat, buildingMaterials, COLORS } from './materials.js';
 import { buildLandmark } from './landmarks.js';
 
@@ -11,7 +11,7 @@ export class CityRenderer {
   readonly group = new THREE.Group();
 
   constructor(city: CityData) {
-    this.buildGround();
+    this.buildGround(city);
     this.buildParks(city);
     this.buildRoads(city);
     this.buildRiver(city); // after roads so the Seine sits on top where streets cross it
@@ -20,34 +20,24 @@ export class CityRenderer {
     this.buildLandmarks(city);
   }
 
-  private buildGround() {
-    // Suburbs ring (dark, beyond the Périph) then the circular city ground.
-    const outside = new THREE.Mesh(new THREE.CircleGeometry(CITY_RADIUS + 400, 8), flat(0x2a3326));
+  private buildGround(city: CityData) {
+    // Dark suburbs underneath everything.
+    const outside = new THREE.Mesh(new THREE.CircleGeometry(1200, 8), flat(0x2a3326));
     outside.rotation.x = -Math.PI / 2;
-    outside.position.y = -0.1;
+    outside.position.y = -0.2;
     this.group.add(outside);
 
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(CITY_RADIUS, 64), flat(COLORS.ground));
+    // City ground = the Paris outline polygon (the Périph itself is a road).
+    const shape = new THREE.Shape();
+    city.boundary.forEach((p, i) => {
+      if (i) shape.lineTo(p.x, -p.z);
+      else shape.moveTo(p.x, -p.z); // -z so rotateX(-90) maps back to world +Z
+    });
+    shape.closePath();
+    const ground = new THREE.Mesh(new THREE.ShapeGeometry(shape), flat(COLORS.ground));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.05;
+    ground.position.y = -0.1;
     this.group.add(ground);
-
-    // Périphérique: a dark ring road at the city's edge.
-    const periph = new THREE.Mesh(
-      new THREE.RingGeometry(CITY_RADIUS - PERIPH_WIDTH, CITY_RADIUS, 64),
-      flat(COLORS.road),
-    );
-    periph.rotation.x = -Math.PI / 2;
-    periph.position.y = 0.0;
-    this.group.add(periph);
-    // Lane hint line.
-    const line = new THREE.Mesh(
-      new THREE.RingGeometry(CITY_RADIUS - PERIPH_WIDTH / 2 - 0.4, CITY_RADIUS - PERIPH_WIDTH / 2 + 0.4, 64),
-      flat(0x6a6f57),
-    );
-    line.rotation.x = -Math.PI / 2;
-    line.position.y = 0.012;
-    this.group.add(line);
   }
 
   private buildRiver(city: CityData) {
@@ -80,7 +70,7 @@ export class CityRenderer {
     // culling would hide from the steep top-down camera.
     const riverMat = new THREE.MeshLambertMaterial({ color: COLORS.river, side: THREE.DoubleSide });
     const river = new THREE.Mesh(geo, riverMat);
-    river.position.y = 0.06; // clearly above roads/ground
+    river.position.y = 0.14; // clearly above roads/ground
     this.group.add(river);
 
     // Bridges.
@@ -96,7 +86,7 @@ export class CityRenderer {
     for (const p of city.parks) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(p.hw * 2, p.hd * 2), flat(COLORS.park));
       m.rotation.x = -Math.PI / 2;
-      m.position.set(p.cx, 0.015, p.cz);
+      m.position.set(p.cx, 0.02, p.cz);
       this.group.add(m);
     }
   }
@@ -112,7 +102,7 @@ export class CityRenderer {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(r.width, len), flat(COLORS.road));
         m.rotation.x = -Math.PI / 2;
         m.rotation.z = -Math.atan2(dz, dx) + Math.PI / 2;
-        m.position.set((a.x + b.x) / 2, 0.01, (a.z + b.z) / 2);
+        m.position.set((a.x + b.x) / 2, 0.08, (a.z + b.z) / 2); // clearly above parks/ground
         this.group.add(m);
       }
     }
