@@ -314,23 +314,27 @@ function buildBridges(): Bridge[] {
     const uz = dz / len;
     const steps = Math.max(2, Math.ceil(len / 3));
     let spanStart = -1;
-    // Deck spans straight across the river (transverse): long axis = river normal,
-    // centred on the crossing; width covers the road's spread along the flow.
+    // Deck spans straight across the river (transverse): long axis = river normal.
+    // Decks are barely wider than the road; a diagonal crossing is tiled with a
+    // few of them along the span (greedy dedup later trims redundant ones).
+    const width = r.width + 4;
     const deck = (d0: number, d1: number) => {
-      const mid = (d0 + d1) / 2;
-      const cx = r.from.x + ux * mid;
-      const cz = r.from.z + uz * mid;
-      const { tx, tz } = tangentAt(cx, cz);
-      const nx = -tz; // river normal
-      const nz = tx;
-      const alongFlow = Math.abs((ux * (d1 - d0)) * tx + (uz * (d1 - d0)) * tz);
-      cands.push({
-        x: cx,
-        z: cz,
-        rotationY: Math.atan2(-nz, nx), // deck long (X) axis along the river normal
-        length: SEINE_WIDTH + 26, // span the water + onto both banks
-        width: Math.max(r.width + 4, alongFlow + 8),
-      });
+      const step = Math.max(8, r.width); // overlaps (width = r.width+4) so no gaps
+      for (let dd = d0; dd < d1 + step; dd += step) {
+        const m = Math.min(dd, d1);
+        const cx = r.from.x + ux * m;
+        const cz = r.from.z + uz * m;
+        const { tx, tz } = tangentAt(cx, cz);
+        const nx = -tz; // river normal
+        const nz = tx;
+        cands.push({
+          x: cx,
+          z: cz,
+          rotationY: Math.atan2(-nz, nx), // deck long (X) axis along the river normal
+          length: SEINE_WIDTH + 26, // span the water + onto both banks
+          width,
+        });
+      }
     };
     for (let i = 0; i <= steps; i++) {
       const d = (len * i) / steps;
