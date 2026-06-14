@@ -241,11 +241,14 @@ export function buildParis(): CityData {
       { x: N.pantheon.x, z: N.pantheon.z - 16, rotationY: Math.PI },
     ],
     pickups: [
-      { x: N.concorde.x + 12, z: N.concorde.z, weaponId: 1 },
-      { x: N.louvre.x, z: N.louvre.z + 14, weaponId: 2 },
-      { x: N.eiffel.x + 24, z: N.eiffel.z + 8, weaponId: 3 },
-      { x: N.bastille.x + 10, z: N.bastille.z, weaponId: 2 },
-      { x: N.republique.x, z: N.republique.z + 12, weaponId: 1 },
+      { x: N.concorde.x + 12, z: N.concorde.z, kind: 0, weaponId: 1 },
+      { x: N.louvre.x, z: N.louvre.z + 14, kind: 0, weaponId: 2 },
+      { x: N.eiffel.x + 24, z: N.eiffel.z + 8, kind: 0, weaponId: 3 },
+      { x: N.bastille.x + 10, z: N.bastille.z, kind: 0, weaponId: 2 },
+      { x: N.republique.x, z: N.republique.z + 12, kind: 0, weaponId: 3 },
+      { x: N.opera.x - 10, z: N.opera.z + 16, kind: 1, weaponId: 0 }, // health
+      { x: N.pantheon.x + 10, z: N.pantheon.z - 16, kind: 1, weaponId: 0 },
+      { x: N.notredame.x - 8, z: N.notredame.z + 10, kind: 1, weaponId: 0 },
     ],
     vehicles: [
       { x: N.concorde.x + 6, z: N.concorde.z - 18, rotationY: 0, colorId: 0 },

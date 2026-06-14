@@ -3,6 +3,7 @@ import type { Connection } from '../net/Connection.js';
 import { RemotePlayer } from './RemotePlayer.js';
 import { VehicleEntity } from './VehicleEntity.js';
 import { NpcEntity } from './NpcEntity.js';
+import { makePickupMesh } from './views.js';
 
 export interface LocalPlayerFields {
   x: number;
@@ -38,7 +39,7 @@ export class EntityManager {
   vehicles = new Map<string, VehicleEntity>();
   vehicleStates = new Map<string, VehicleFields>();
   npcs = new Map<string, NpcEntity>();
-  pickups = new Map<string, THREE.Mesh>();
+  pickups = new Map<string, THREE.Object3D>();
 
   constructor(
     private scene: THREE.Scene,
@@ -126,10 +127,7 @@ export class EntityManager {
     });
 
     $(state).pickups.onAdd((pk: any, id: string) => {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1, 0.4, 1),
-        new THREE.MeshLambertMaterial({ color: 0x39d98a, emissive: 0x103b27 }),
-      );
+      const mesh = makePickupMesh(pk.kind, pk.weaponId);
       mesh.position.set(pk.x, 0.8, pk.z);
       this.scene.add(mesh);
       this.pickups.set(id, mesh);

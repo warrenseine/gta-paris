@@ -56,6 +56,7 @@ export class PickupState extends Schema {
   @type('string') id = '';
   @type('number') x = 0;
   @type('number') z = 0;
+  @type('uint8') kind = 0; // 0 = weapon, 1 = health
   @type('number') weaponId = 1;
   @type('boolean') active = true;
 }
@@ -173,6 +174,7 @@ export class ParisRoom extends Room<GameState> {
       ps.id = id;
       ps.x = pk.x;
       ps.z = pk.z;
+      ps.kind = pk.kind;
       ps.weaponId = pk.weaponId;
       this.state.pickups.set(id, ps);
     });
@@ -319,7 +321,11 @@ export class ParisRoom extends Room<GameState> {
     // Broadcast a cosmetic tracer to other nearby clients.
     const tx = hitTargetId ? hx : msg.ox + msg.dx * w.range;
     const tz = hitTargetId ? hz : msg.oz + msg.dz * w.range;
-    this.broadcast(MSG.fireEvent, { ox: msg.ox, oz: msg.oz, tx, tz, hit: !!hitTargetId }, { except: client });
+    this.broadcast(
+      MSG.fireEvent,
+      { ox: msg.ox, oz: msg.oz, tx, tz, hit: !!hitTargetId, weaponId: shooter.weaponId },
+      { except: client },
+    );
   }
 
   private applyDamage(killerId: string, victimId: string, dmg: number) {
@@ -650,15 +656,19 @@ export class ParisRoom extends Room<GameState> {
       }
       for (const [, ps] of this.state.players) {
         if (!ps.alive || ps.vehicleId) continue;
-        if (Math.hypot(pk.x - ps.x, pk.z - ps.z) < PICKUP_RADIUS) {
+        if (Math.hypot(pk.x - ps.x, pk.z - ps.z) >= PICKUP_RADIUS) continue;
+        if (pk.kind === 1) {
+          if (ps.health >= PLAYER.maxHealth) continue; // only grab health when hurt
+          ps.health = Math.min(PLAYER.maxHealth, ps.health + 50);
+        } else {
           ps.weaponId = pk.weaponId;
           ps.ammo = weapon(pk.weaponId).magazine;
           const sim = this.sims.get(ps.id);
           if (sim) sim.reloadAtTick = 0;
-          pk.active = false;
-          this.pickupRespawn.set(id, tickNo + PICKUP_RESPAWN_TICKS);
-          break;
         }
+        pk.active = false;
+        this.pickupRespawn.set(id, tickNo + PICKUP_RESPAWN_TICKS);
+        break;
       }
     }
   }

@@ -34,4 +34,5 @@ export interface FireEvent {
   tx: number;
   tz: number;
   hit: boolean;
+  weaponId: number;
 }

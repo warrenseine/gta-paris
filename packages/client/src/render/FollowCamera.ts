@@ -33,9 +33,9 @@ export class FollowCamera {
 
   /** target = player ground position; aim = unit view-orientation vector. */
   update(tx: number, tz: number, dt: number, aimX = 0, aimZ = 0) {
-    this.occBoost += (this.occTarget - this.occBoost) * (1 - Math.exp(-4 * dt));
-    const pitch = ((CAMERA.pitchDeg + this.occBoost * 22) * Math.PI) / 180; // up to ~84deg
-    const distance = CAMERA.distance + this.occBoost * 30;
+    this.occBoost += (this.occTarget - this.occBoost) * (1 - Math.exp(-5 * dt));
+    const pitch = ((CAMERA.pitchDeg + this.occBoost * 27) * Math.PI) / 180; // toward ~89deg (near top-down)
+    const distance = CAMERA.distance + this.occBoost * 22;
     const horiz = Math.cos(pitch) * distance;
     const vert = Math.sin(pitch) * distance;
 

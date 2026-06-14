@@ -22,22 +22,48 @@ export class AudioManager {
     this.ctx?.resume();
   }
 
-  /** Gunshot: noise burst with a fast decay. vol scales for distance/remote. */
-  shot(vol = 0.5) {
+  /** Gunshot, shaped per weapon. weaponId: 1 pistol, 2 SMG, 3 shotgun. */
+  shot(weaponId = 1, vol = 0.5) {
     this.ensure();
     if (!this.ctx || !this.noise) return;
     const t = this.ctx.currentTime;
+
+    // Per-weapon character.
+    let dur = 0.13;
+    let bp = 2200; // band-pass centre
+    let q = 0.9;
+    let punch = 70; // low-end thump frequency
+    if (weaponId === 3) {
+      dur = 0.4; bp = 900; q = 0.5; punch = 55; vol *= 1.25; // shotgun: deep boomy blast
+    } else if (weaponId === 2) {
+      dur = 0.08; bp = 3000; q = 1.4; punch = 90; // SMG: tight high crack
+    }
+
+    // Noise body through a band-pass.
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise;
-    const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 1800;
+    const bpf = this.ctx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.value = bp;
+    bpf.Q.value = q;
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-    src.connect(lp).connect(g).connect(this.ctx.destination);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(bpf).connect(g).connect(this.ctx.destination);
     src.start(t);
-    src.stop(t + 0.2);
+    src.stop(t + dur + 0.05);
+
+    // Low-end "thump" transient for body.
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(punch * 2.4, t);
+    osc.frequency.exponentialRampToValueAtTime(punch, t + dur * 0.8);
+    const og = this.ctx.createGain();
+    og.gain.setValueAtTime(vol * 0.6, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.9);
+    osc.connect(og).connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur);
   }
 
   /** Explosion: low noise burst + descending tone, scaled by distance. */

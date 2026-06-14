@@ -78,3 +78,41 @@ const PED_PANTS = [0x2f333a, 0x3a3026, 0x26332b, 0x33262f, 0x2a2a2a];
 export function makePedMesh(colorId: number): THREE.Group {
   return makeHuman(PED_SHIRTS[colorId % PED_SHIRTS.length], PED_PANTS[colorId % PED_PANTS.length]);
 }
+
+// Pickup: a glowing pad + an item shape that reads from above.
+// kind 1 = health (red cross); kind 0 = weapon (weaponId 1 pistol, 2 SMG, 3 shotgun).
+export function makePickupMesh(kind: number, weaponId: number): THREE.Group {
+  const g = new THREE.Group();
+  const padColor = kind === 1 ? 0xff4d5e : weaponId === 3 ? 0xff8a3a : weaponId === 2 ? 0x39d98a : 0x5fd0ff;
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.9, 0.9, 0.18, 16),
+    new THREE.MeshLambertMaterial({ color: padColor, emissive: padColor, emissiveIntensity: 0.5 }),
+  );
+  pad.position.y = 0.1;
+  g.add(pad);
+
+  const metal = 0x33373d;
+  const part = (w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), flat(color));
+    m.position.set(x, 0.9 + y, z);
+    g.add(m);
+  };
+
+  if (kind === 1) {
+    part(0.9, 0.25, 0.3, 0xffffff); // white cross
+    part(0.3, 0.25, 0.9, 0xffffff);
+    part(1.0, 0.2, 1.0, 0xd83b4b, 0, -0.18); // red base
+  } else if (weaponId === 3) {
+    part(0.22, 0.22, 1.5, metal, 0, 0, 0.1); // shotgun: long double barrel
+    part(0.22, 0.22, 1.5, metal, 0.18, 0, 0.1);
+    part(0.3, 0.32, 0.5, 0x6b4a2f, 0, 0, -0.7); // stock
+  } else if (weaponId === 2) {
+    part(0.26, 0.28, 1.0, metal); // SMG body
+    part(0.22, 0.5, 0.22, metal, 0, -0.3, 0.2); // magazine
+    part(0.24, 0.34, 0.3, 0x222222, 0, -0.1, -0.45); // grip
+  } else {
+    part(0.24, 0.26, 0.7, metal, 0, 0, 0.1); // pistol slide
+    part(0.22, 0.36, 0.26, 0x222222, 0, -0.22, -0.18); // grip
+  }
+  return g;
+}

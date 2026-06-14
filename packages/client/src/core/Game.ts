@@ -99,7 +99,7 @@ export class Game {
       this.effects.tracer(fx.ox, fx.oz, fx.tx, fx.tz);
       if (fx.hit) this.effects.spark(fx.tx, fx.tz);
       const d = Math.hypot(fx.ox - this.selfX, fx.oz - this.selfZ);
-      this.audio.shot(Math.max(0.05, 0.4 * (1 - d / 150)));
+      this.audio.shot(fx.weaponId, Math.max(0.05, 0.45 * (1 - d / 160)));
     });
 
     // Car destroyed -> explosion FX + boom (distance-scaled).
@@ -235,7 +235,7 @@ export class Game {
       if (rp.mesh.visible) targets.push({ id, x: rp.mesh.position.x, z: rp.mesh.position.z, r: 0.6 });
     }
     for (const [id, ne] of this.entities.npcs) {
-      if (ne.mesh.visible) targets.push({ id, x: ne.mesh.position.x, z: ne.mesh.position.z, r: 0.7 });
+      if (ne.mesh.visible && !ne.dead) targets.push({ id, x: ne.mesh.position.x, z: ne.mesh.position.z, r: 0.7 });
     }
     return targets;
   }
@@ -252,7 +252,7 @@ export class Game {
     const tx = hit ? hit.x : ox + aimX * w.range;
     const tz = hit ? hit.z : oz + aimZ * w.range;
     this.effects.tracer(ox, oz, tx, tz);
-    this.audio.shot(0.5);
+    this.audio.shot(weaponId, 0.5);
     if (hit) {
       this.effects.spark(tx, tz);
       this.audio.hit();

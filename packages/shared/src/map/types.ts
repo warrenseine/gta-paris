@@ -68,6 +68,8 @@ export interface SpawnPoint {
 export interface PickupSpawn {
   x: number;
   z: number;
+  /** 0 = weapon (use weaponId), 1 = health pack. */
+  kind: number;
   weaponId: number;
 }
 
