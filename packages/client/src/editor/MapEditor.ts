@@ -207,10 +207,10 @@ export class MapEditor {
     else if (k === 'e' || k === ']') this.rotateSel(Math.PI / 12);
     else if (k === '-') this.scaleSel(0.9);
     else if (k === '=' || k === '+') this.scaleSel(1.1);
-    else if (k === ',') this.scaleAxis('w', 0.9);
-    else if (k === '.') this.scaleAxis('w', 1.1);
-    else if (k === ';') this.scaleAxis('d', 0.9);
-    else if (k === "'") this.scaleAxis('d', 1.1);
+    else if (e.code === 'Comma') this.scaleAxis('w', 0.9);
+    else if (e.code === 'Period') this.scaleAxis('w', 1.1);
+    else if (e.code === 'Semicolon') this.scaleAxis('d', 0.9);
+    else if (e.code === 'Quote') this.scaleAxis('d', 1.1);
     else if (k === 'x' || e.code === 'Delete' || e.code === 'Backspace') this.deleteSel();
     else if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
