@@ -6,7 +6,23 @@ export type LandmarkKey =
   | 'louvre'
   | 'notredame'
   | 'sacrecoeur'
-  | 'concorde';
+  | 'concorde'
+  | 'opera'
+  | 'pantheon'
+  | 'invalides'
+  | 'madeleine'
+  | 'montparnasse'
+  | 'grandpalais'
+  | 'arcdetriomphe';
+
+/** A green space (park). Axis-aligned rectangle for simplicity. */
+export interface ParkDef {
+  name: string;
+  cx: number;
+  cz: number;
+  hw: number;
+  hd: number;
+}
 
 export interface RoadDef {
   name: string;
@@ -68,6 +84,7 @@ export interface CityData {
   buildings: BuildingDef[];
   landmarks: LandmarkDef[];
   river: RiverDef;
+  parks: ParkDef[];
   bridges: { x: number; z: number; rotationY: number; length: number; width: number }[];
   spawns: SpawnPoint[];
   pickups: PickupSpawn[];

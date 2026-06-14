@@ -21,10 +21,17 @@ const SMALL_RADIUS = 200; // meters shown around player in corner mode
 const LANDMARK_LABEL: Record<LandmarkKey, string> = {
   eiffel: 'Eiffel',
   arc: 'Arc',
+  arcdetriomphe: 'Arc de Triomphe',
   louvre: 'Louvre',
   notredame: 'Notre-Dame',
   sacrecoeur: 'Sacré-Cœur',
   concorde: 'Concorde',
+  opera: 'Opéra',
+  pantheon: 'Panthéon',
+  invalides: 'Invalides',
+  madeleine: 'Madeleine',
+  grandpalais: 'Grand Palais',
+  montparnasse: 'Montparnasse',
 };
 
 // Semi-transparent live minimap. Corner mode follows the player zoomed in;

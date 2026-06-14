@@ -1,12 +1,11 @@
-// Compact stylized Paris. Landmarks pulled close (~200-400m apart) into a dense
-// playfield. Buildings generated procedurally as Haussmann-ish blocks between a
-// radiating boulevard grid, with the Seine splitting north/south banks.
+// Stylized but layout-faithful Paris: real landmark relative positions, the
+// Étoile star + grands boulevards + quais as angled avenues (not a grid), the
+// curving Seine, and green parks. Buildings fill the blocks between.
 
-import type { CityData, BuildingDef, LandmarkDef } from './types.js';
+import type { CityData, BuildingDef, LandmarkDef, ParkDef, LandmarkKey } from './types.js';
 import type { Vec2 } from '../math.js';
 import { MAP_BOUNDS } from '../constants.js';
 
-// Deterministic PRNG so client + server build identical cities.
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -18,60 +17,37 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-// Landmark anchor positions (XZ), origin = Place de la Concorde.
-export const LANDMARK_POS = {
-  concorde: { x: 0, z: 0 },
-  arc: { x: -320, z: -120 }, // west along Champs-Elysees
-  eiffel: { x: -260, z: 240 }, // southwest, across the Seine
-  louvre: { x: 220, z: 30 }, // east
-  notredame: { x: 360, z: 150 }, // further east, on a Seine island
-  sacrecoeur: { x: 60, z: -360 }, // north, on the hill
-} as const;
-
-// Seine runs roughly west -> east, curving, south of center.
-const SEINE_POINTS = [
-  { x: -600, z: 200 },
-  { x: -300, z: 170 },
-  { x: -60, z: 150 },
-  { x: 200, z: 120 },
-  { x: 380, z: 170 },
-  { x: 600, z: 230 },
-];
-const SEINE_WIDTH = 60;
-
-function nearSeine(x: number, z: number, margin: number): boolean {
-  // Distance to the polyline (approx, segment by segment).
-  for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
-    const a = SEINE_POINTS[i];
-    const b = SEINE_POINTS[i + 1];
-    const abx = b.x - a.x;
-    const abz = b.z - a.z;
-    const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz)));
-    const px = a.x + abx * t;
-    const pz = a.z + abz * t;
-    if (Math.hypot(x - px, z - pz) < SEINE_WIDTH / 2 + margin) return true;
-  }
-  return false;
-}
-
-function nearLandmark(x: number, z: number, margin: number): boolean {
-  for (const k of Object.keys(LANDMARK_POS) as (keyof typeof LANDMARK_POS)[]) {
-    const p = LANDMARK_POS[k];
-    if (Math.hypot(x - p.x, z - p.z) < margin) return true;
-  }
-  return false;
-}
-
-// Radiating boulevards (the Paris star) — buildings avoid these strips.
-const BOULEVARDS = [
-  { from: LANDMARK_POS.arc, to: LANDMARK_POS.concorde }, // Champs-Elysees
-  { from: LANDMARK_POS.concorde, to: LANDMARK_POS.louvre },
-  { from: LANDMARK_POS.concorde, to: LANDMARK_POS.sacrecoeur },
-  { from: LANDMARK_POS.louvre, to: LANDMARK_POS.notredame },
-  { from: LANDMARK_POS.arc, to: LANDMARK_POS.eiffel },
-];
-const ROAD_WIDTH = 18; // wide radiating boulevards (the étoile)
-const STREET_WIDTH = 10; // ordinary streets between blocks
+// Named places (world XZ; +x east, +z south). Positions follow the real city's
+// relative layout, scaled into the playfield.
+const N = {
+  etoile: { x: -360, z: -150 },
+  trocadero: { x: -380, z: 30 },
+  eiffel: { x: -300, z: 110 },
+  champdemars: { x: -300, z: 175 },
+  invalides: { x: -150, z: 95 },
+  grandpalais: { x: -210, z: 5 },
+  concorde: { x: -120, z: -35 },
+  madeleine: { x: -120, z: -95 },
+  opera: { x: -45, z: -120 },
+  monceau: { x: -250, z: -245 },
+  louvre: { x: 55, z: 5 },
+  palais: { x: 25, z: -40 },
+  chatelet: { x: 120, z: 35 },
+  hoteldeville: { x: 160, z: 45 },
+  notredame: { x: 150, z: 80 },
+  pantheon: { x: 110, z: 175 },
+  luxembourg: { x: 55, z: 180 },
+  montparnasse: { x: -25, z: 265 },
+  saintmichel: { x: 110, z: 100 },
+  republique: { x: 230, z: -110 },
+  bastille: { x: 250, z: 65 },
+  nation: { x: 380, z: 120 },
+  garedunord: { x: 70, z: -210 },
+  garedelyon: { x: 305, z: 140 },
+  sacrecoeur: { x: 45, z: -310 },
+  buttes: { x: 320, z: -240 },
+  perelachaise: { x: 390, z: -30 },
+};
 
 interface Seg {
   from: Vec2;
@@ -79,29 +55,117 @@ interface Seg {
   width: number;
 }
 
-// Boulevards (the radiating star) + a denser grid of streets carving the city
-// into blocks, so it reads like a real street network rather than open ground.
-function buildRoadSegments(): Seg[] {
-  const segs: Seg[] = BOULEVARDS.map((b) => ({ from: { ...b.from }, to: { ...b.to }, width: ROAD_WIDTH }));
-  const lines = [-480, -360, -240, -120, 120, 240, 360, 480];
-  const lo = MAP_BOUNDS.minX + 24;
-  const hi = MAP_BOUNDS.maxX - 24;
-  for (const x of lines) segs.push({ from: { x, z: lo }, to: { x, z: hi }, width: STREET_WIDTH });
-  for (const z of lines) segs.push({ from: { x: lo, z }, to: { x: hi, z }, width: STREET_WIDTH });
-  return segs;
+// Avenues: connect places at real angles. Wide for the grand axes, medium else.
+const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
+  // Étoile star.
+  ['etoile', 'concorde', 20], // Champs-Élysées
+  ['etoile', 'trocadero', 14],
+  ['etoile', 'grandpalais', 13],
+  ['etoile', 'monceau', 13],
+  ['etoile', 'invalides', 13],
+  // Rivoli / grand east axis.
+  ['concorde', 'louvre', 16],
+  ['louvre', 'chatelet', 16],
+  ['chatelet', 'hoteldeville', 14],
+  ['hoteldeville', 'bastille', 16],
+  ['bastille', 'nation', 16],
+  // North boulevards + opera.
+  ['concorde', 'madeleine', 13],
+  ['madeleine', 'opera', 14],
+  ['opera', 'louvre', 14], // av. de l'Opéra
+  ['opera', 'republique', 15], // grands boulevards
+  ['republique', 'bastille', 14],
+  ['republique', 'perelachaise', 13],
+  ['opera', 'garedunord', 13],
+  ['garedunord', 'sacrecoeur', 12],
+  ['garedunord', 'buttes', 12],
+  // South bank.
+  ['invalides', 'eiffel', 14],
+  ['trocadero', 'eiffel', 13], // pont d'Iéna axis
+  ['eiffel', 'champdemars', 12],
+  ['invalides', 'saintmichel', 15], // bd Saint-Germain
+  ['saintmichel', 'luxembourg', 13],
+  ['luxembourg', 'pantheon', 12],
+  ['luxembourg', 'montparnasse', 14],
+  ['saintmichel', 'notredame', 12],
+  ['chatelet', 'notredame', 12],
+  ['notredame', 'pantheon', 12],
+  ['bastille', 'garedelyon', 14],
+  ['garedelyon', 'nation', 13],
+];
+
+function buildAvenues(): Seg[] {
+  return AVENUES.map(([a, c, w]) => ({ from: { ...N[a] }, to: { ...N[c] }, width: w }));
+}
+const ROADS = buildAvenues();
+
+// Seine: curving W->E band through the south-centre, past the île (Notre-Dame).
+const SEINE_POINTS: Vec2[] = [
+  { x: -600, z: 80 },
+  { x: -340, z: 80 },
+  { x: -160, z: 55 },
+  { x: 30, z: 55 },
+  { x: 150, z: 70 },
+  { x: 320, z: 95 },
+  { x: 600, z: 150 },
+];
+const SEINE_WIDTH = 46;
+
+const PARKS: ParkDef[] = [
+  { name: 'Jardin des Tuileries', cx: -35, cz: -15, hw: 70, hd: 18 },
+  { name: 'Champ de Mars', cx: -300, cz: 165, hw: 28, hd: 70 },
+  { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
+  { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
+  { name: 'Buttes-Chaumont', cx: 320, cz: -245, hw: 50, hd: 45 },
+  { name: 'Père-Lachaise', cx: 395, cz: -35, hw: 48, hd: 60 },
+  { name: 'Bois de Boulogne', cx: -560, cz: -10, hw: 70, hd: 150 },
+  { name: 'Bois de Vincennes', cx: 560, cz: 90, hw: 70, hd: 140 },
+];
+
+function distToSeg(x: number, z: number, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+  return Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
 }
 
-const ROADS = buildRoadSegments();
-
 function onRoad(x: number, z: number, margin: number): boolean {
-  for (const r of ROADS) {
-    const abx = r.to.x - r.from.x;
-    const abz = r.to.z - r.from.z;
-    const t = Math.max(0, Math.min(1, ((x - r.from.x) * abx + (z - r.from.z) * abz) / (abx * abx + abz * abz)));
-    const px = r.from.x + abx * t;
-    const pz = r.from.z + abz * t;
-    if (Math.hypot(x - px, z - pz) < r.width / 2 + margin) return true;
+  for (const r of ROADS) if (distToSeg(x, z, r.from, r.to) < r.width / 2 + margin) return true;
+  return false;
+}
+
+function nearSeine(x: number, z: number, margin: number): boolean {
+  for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
+    if (distToSeg(x, z, SEINE_POINTS[i], SEINE_POINTS[i + 1]) < SEINE_WIDTH / 2 + margin) return true;
   }
+  return false;
+}
+
+function inPark(x: number, z: number, margin: number): boolean {
+  for (const p of PARKS) {
+    if (Math.abs(x - p.cx) < p.hw + margin && Math.abs(z - p.cz) < p.hd + margin) return true;
+  }
+  return false;
+}
+
+// Landmarks: position + key. y raised for the ones on higher ground.
+const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number }[] = [
+  { key: 'arcdetriomphe', at: N.etoile },
+  { key: 'eiffel', at: N.eiffel },
+  { key: 'louvre', at: N.louvre },
+  { key: 'notredame', at: N.notredame },
+  { key: 'sacrecoeur', at: N.sacrecoeur, y: 22 },
+  { key: 'concorde', at: N.concorde },
+  { key: 'opera', at: N.opera },
+  { key: 'pantheon', at: N.pantheon },
+  { key: 'invalides', at: N.invalides },
+  { key: 'madeleine', at: N.madeleine },
+  { key: 'grandpalais', at: N.grandpalais },
+  { key: 'montparnasse', at: N.montparnasse },
+];
+
+function nearLandmark(x: number, z: number, margin: number): boolean {
+  for (const l of LANDMARKS) if (Math.hypot(x - l.at.x, z - l.at.z) < margin) return true;
   return false;
 }
 
@@ -109,19 +173,18 @@ function buildBuildings(): BuildingDef[] {
   const rng = mulberry32(0x9a17);
   const buildings: BuildingDef[] = [];
   let id = 0;
-  const step = 30; // block grid spacing
+  const step = 28;
   for (let gx = MAP_BOUNDS.minX + 40; gx < MAP_BOUNDS.maxX - 40; gx += step) {
     for (let gz = MAP_BOUNDS.minZ + 40; gz < MAP_BOUNDS.maxZ - 40; gz += step) {
-      // Jitter within the cell.
-      const cx = gx + (rng() - 0.5) * 8;
-      const cz = gz + (rng() - 0.5) * 8;
-      if (nearSeine(cx, cz, 8)) continue;
-      if (nearLandmark(cx, cz, 70)) continue;
+      const cx = gx + (rng() - 0.5) * 7;
+      const cz = gz + (rng() - 0.5) * 7;
+      if (nearSeine(cx, cz, 6)) continue;
+      if (nearLandmark(cx, cz, 60)) continue;
+      if (inPark(cx, cz, 4)) continue;
       if (onRoad(cx, cz, 4)) continue;
-      if (rng() < 0.1) continue; // courtyards / gaps
-      const hw = 8 + rng() * 6;
-      const hd = 8 + rng() * 6;
-      // Haussmann: uniform ~18-28m cornice line, slightly taller toward edges.
+      if (rng() < 0.08) continue;
+      const hw = 7 + rng() * 6;
+      const hd = 7 + rng() * 6;
       const edge = Math.max(Math.abs(cx), Math.abs(cz)) / 600;
       const height = 16 + rng() * 9 + edge * 14;
       buildings.push({
@@ -131,7 +194,7 @@ function buildBuildings(): BuildingDef[] {
         hw,
         hd,
         height,
-        rotationY: (rng() - 0.5) * 0.25,
+        rotationY: (rng() - 0.5) * 0.2,
         paletteId: Math.floor(rng() * 6),
       });
     }
@@ -140,59 +203,58 @@ function buildBuildings(): BuildingDef[] {
 }
 
 function buildLandmarks(): LandmarkDef[] {
-  let id = 0;
-  const mk = (key: LandmarkDef['key'], pos: { x: number; z: number }, scale: number, y = 0): LandmarkDef => ({
-    id: id++,
-    key,
-    position: { x: pos.x, y, z: pos.z },
+  return LANDMARKS.map((l, id) => ({
+    id,
+    key: l.key,
+    position: { x: l.at.x, y: l.y ?? 0, z: l.at.z },
     rotationY: 0,
-    scale,
-  });
-  return [
-    mk('eiffel', LANDMARK_POS.eiffel, 1),
-    mk('arc', LANDMARK_POS.arc, 1),
-    mk('louvre', LANDMARK_POS.louvre, 1),
-    mk('notredame', LANDMARK_POS.notredame, 1),
-    mk('sacrecoeur', LANDMARK_POS.sacrecoeur, 1, 24), // on the hill
-    mk('concorde', LANDMARK_POS.concorde, 1),
-  ];
+    scale: 1,
+  }));
 }
+
+export const LANDMARK_POS = N;
 
 export function buildParis(): CityData {
   return {
     bounds: { ...MAP_BOUNDS },
     roads: ROADS.map((r, i) => ({
-      name: `road-${i}`,
+      name: `ave-${i}`,
       points: [{ x: r.from.x, z: r.from.z }, { x: r.to.x, z: r.to.z }],
       width: r.width,
     })),
     buildings: buildBuildings(),
     landmarks: buildLandmarks(),
     river: { points: SEINE_POINTS, width: SEINE_WIDTH },
+    parks: PARKS,
     bridges: [
-      { x: -40, z: 150, rotationY: Math.PI / 2, length: SEINE_WIDTH + 20, width: 14 },
-      { x: 220, z: 120, rotationY: Math.PI / 2, length: SEINE_WIDTH + 20, width: 14 },
+      { x: -300, z: 80, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
+      { x: 30, z: 55, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
+      { x: 150, z: 70, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
+      { x: 320, z: 95, rotationY: Math.PI / 2, length: SEINE_WIDTH + 16, width: 12 },
     ],
     spawns: [
-      { x: 0, z: -20, rotationY: 0 },
-      { x: 30, z: 20, rotationY: Math.PI },
-      { x: -260, z: 200, rotationY: 0 },
-      { x: 200, z: 60, rotationY: Math.PI / 2 },
-      { x: 60, z: -320, rotationY: 0 },
+      { x: N.concorde.x, z: N.concorde.z - 14, rotationY: 0 },
+      { x: N.louvre.x, z: N.louvre.z - 16, rotationY: Math.PI },
+      { x: N.eiffel.x + 20, z: N.eiffel.z, rotationY: Math.PI / 2 },
+      { x: N.bastille.x, z: N.bastille.z - 16, rotationY: 0 },
+      { x: N.opera.x, z: N.opera.z + 16, rotationY: 0 },
+      { x: N.pantheon.x, z: N.pantheon.z - 16, rotationY: Math.PI },
     ],
     pickups: [
-      { x: 10, z: 0, weaponId: 1 },
-      { x: -250, z: 230, weaponId: 2 },
-      { x: 210, z: 40, weaponId: 3 },
+      { x: N.concorde.x + 12, z: N.concorde.z, weaponId: 1 },
+      { x: N.louvre.x, z: N.louvre.z + 14, weaponId: 2 },
+      { x: N.eiffel.x + 24, z: N.eiffel.z + 8, weaponId: 3 },
+      { x: N.bastille.x + 10, z: N.bastille.z, weaponId: 2 },
+      { x: N.republique.x, z: N.republique.z + 12, weaponId: 1 },
     ],
-    // A car parked ~6m from every spawn, plus a couple extra.
     vehicles: [
-      { x: 4, z: -16, rotationY: 0, colorId: 0 },
-      { x: 34, z: 16, rotationY: Math.PI, colorId: 1 },
-      { x: -256, z: 204, rotationY: 0, colorId: 2 },
-      { x: 204, z: 56, rotationY: Math.PI / 2, colorId: 3 },
-      { x: 64, z: -324, rotationY: 0, colorId: 4 },
-      { x: 220, z: 30, rotationY: Math.PI / 2, colorId: 0 },
+      { x: N.concorde.x + 6, z: N.concorde.z - 18, rotationY: 0, colorId: 0 },
+      { x: N.louvre.x - 8, z: N.louvre.z - 18, rotationY: Math.PI, colorId: 1 },
+      { x: N.eiffel.x + 26, z: N.eiffel.z + 4, rotationY: Math.PI / 2, colorId: 2 },
+      { x: N.bastille.x - 6, z: N.bastille.z - 16, rotationY: 0, colorId: 3 },
+      { x: N.opera.x + 8, z: N.opera.z + 18, rotationY: 0, colorId: 4 },
+      { x: N.pantheon.x - 6, z: N.pantheon.z - 16, rotationY: Math.PI, colorId: 1 },
+      { x: N.etoile.x + 30, z: N.etoile.z + 20, rotationY: Math.PI / 2, colorId: 0 },
     ],
   };
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CityData } from '@gta/shared';
 import { PALETTES } from '@gta/shared';
-import { flat, buildingMaterial, COLORS } from './materials.js';
+import { flat, buildingMaterials, COLORS } from './materials.js';
 import { buildLandmark } from './landmarks.js';
 
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -12,9 +12,11 @@ export class CityRenderer {
 
   constructor(city: CityData) {
     this.buildGround(city);
+    this.buildParks(city);
     this.buildRoads(city);
     this.buildRiver(city); // after roads so the Seine sits on top where streets cross it
     this.buildBuildings(city);
+    this.buildTrees(city);
     this.buildLandmarks(city);
   }
 
@@ -69,6 +71,15 @@ export class CityRenderer {
     }
   }
 
+  private buildParks(city: CityData) {
+    for (const p of city.parks) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(p.hw * 2, p.hd * 2), flat(COLORS.park));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(p.cx, 0.015, p.cz);
+      this.group.add(m);
+    }
+  }
+
   private buildRoads(city: CityData) {
     for (const r of city.roads) {
       for (let i = 0; i < r.points.length - 1; i++) {
@@ -100,7 +111,7 @@ export class CityRenderer {
     const scl = new THREE.Vector3();
     for (const [paletteId, arr] of byPalette) {
       const color = PALETTES[paletteId] ?? PALETTES[0];
-      const inst = new THREE.InstancedMesh(UNIT_BOX, buildingMaterial(color), arr.length);
+      const inst = new THREE.InstancedMesh(UNIT_BOX, buildingMaterials(color), arr.length);
       arr.forEach((b, i) => {
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), b.rotationY);
         pos.set(b.cx, b.height / 2, b.cz);
@@ -111,6 +122,61 @@ export class CityRenderer {
       inst.instanceMatrix.needsUpdate = true;
       this.group.add(inst);
     }
+  }
+
+  private buildTrees(city: CityData) {
+    let seed = 0x7e5;
+    const rng = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const pts: { x: number; z: number }[] = [];
+    // Scatter in parks.
+    for (const p of city.parks) {
+      const n = Math.floor((p.hw * p.hd) / 220);
+      for (let i = 0; i < n; i++) {
+        pts.push({ x: p.cx + (rng() - 0.5) * 2 * (p.hw - 3), z: p.cz + (rng() - 0.5) * 2 * (p.hd - 3) });
+      }
+    }
+    // Line the avenues (both sides).
+    for (const r of city.roads) {
+      for (let i = 0; i < r.points.length - 1; i++) {
+        const a = r.points[i];
+        const b = r.points[i + 1];
+        const len = Math.hypot(b.x - a.x, b.z - a.z);
+        const ux = (b.x - a.x) / len;
+        const uz = (b.z - a.z) / len;
+        const off = r.width / 2 + 3;
+        for (let d = 12; d < len - 12; d += 20) {
+          const px = a.x + ux * d;
+          const pz = a.z + uz * d;
+          pts.push({ x: px - uz * off, z: pz + ux * off });
+          pts.push({ x: px + uz * off, z: pz - ux * off });
+        }
+      }
+    }
+    if (!pts.length) return;
+
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.45, 3, 5);
+    const foliageGeo = new THREE.IcosahedronGeometry(2.4, 0);
+    const trunks = new THREE.InstancedMesh(trunkGeo, flat(0x5a3f2a), pts.length);
+    const foliage = new THREE.InstancedMesh(foliageGeo, flat(0x4a7c3a), pts.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const one = new THREE.Vector3(1, 1, 1);
+    pts.forEach((p, i) => {
+      const s = 0.8 + rng() * 0.6;
+      m.compose(v.set(p.x, 1.5, p.z), q, one);
+      trunks.setMatrixAt(i, m);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng() * 6.28);
+      m.compose(v.set(p.x, 4 + s, p.z), q, one.set(s, s * 1.1, s));
+      foliage.setMatrixAt(i, m);
+      q.identity();
+    });
+    trunks.instanceMatrix.needsUpdate = true;
+    foliage.instanceMatrix.needsUpdate = true;
+    this.group.add(trunks, foliage);
   }
 
   private buildLandmarks(city: CityData) {

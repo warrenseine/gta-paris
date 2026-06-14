@@ -2,99 +2,199 @@ import * as THREE from 'three';
 import type { LandmarkDef } from '@gta/shared';
 import { flat, COLORS } from './materials.js';
 
-// Procedural blocky landmarks — recognizable silhouettes from primitives.
-// (Hand-modeled glTF can replace these later behind the same per-key builder.)
+// Low-poly but recognizable landmarks: primitives (boxes, cylinders, cones,
+// spheres) composed into shapely silhouettes. +Z forward, Y up.
 
-function box(w: number, h: number, d: number, color: number, y: number): THREE.Mesh {
+const STONE = COLORS.landmarkStone;
+const ZINC = COLORS.landmarkZinc;
+const GOLD = COLORS.landmarkGold;
+const WHITE = 0xf2efe6;
+
+function box(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), flat(color));
-  m.position.y = y;
+  m.position.set(x, y, z);
   return m;
+}
+function cyl(r: number, h: number, color: number, x = 0, y = 0, z = 0, seg = 12): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), flat(color));
+  m.position.set(x, y, z);
+  return m;
+}
+function cone(r: number, h: number, color: number, x = 0, y = 0, z = 0, seg = 8): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), flat(color));
+  m.position.set(x, y, z);
+  return m;
+}
+function dome(r: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), flat(color));
+  m.position.set(x, y, z);
+  return m;
+}
+// A row of columns along X.
+function colonnade(count: number, spacing: number, r: number, h: number, z: number, color: number): THREE.Group {
+  const g = new THREE.Group();
+  const x0 = -((count - 1) * spacing) / 2;
+  for (let i = 0; i < count; i++) g.add(cyl(r, h, color, x0 + i * spacing, h / 2, z, 8));
+  return g;
 }
 
 function eiffel(): THREE.Group {
   const g = new THREE.Group();
-  const c = COLORS.landmarkZinc;
-  // Four tapering legs implied by a stack of shrinking boxes + a spire.
-  const levels = [
-    { w: 46, h: 4, y: 2 },
-    { w: 30, h: 60, y: 36 },
-    { w: 16, h: 70, y: 100 },
-    { w: 8, h: 70, y: 168 },
-    { w: 3, h: 50, y: 226 },
+  // Four legs angled inward, meeting at the first platform.
+  const legPos = [
+    [-16, -16], [16, -16], [-16, 16], [16, 16],
   ];
-  for (const l of levels) g.add(box(l.w, l.h, l.w, c, l.y));
-  // Platform decks.
-  g.add(box(38, 2, 38, c, 38));
-  g.add(box(22, 2, 22, c, 104));
+  for (const [lx, lz] of legPos) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(2, 4, 42, 6), flat(ZINC));
+    leg.position.set(lx * 0.6, 21, lz * 0.6);
+    leg.rotation.x = (lz / 16) * 0.14;
+    leg.rotation.z = (-lx / 16) * 0.14;
+    g.add(leg);
+  }
+  g.add(box(40, 3, 40, ZINC, 0, 40)); // first deck
+  g.add(box(22, 36, 22, ZINC, 0, 60)); // mid section (tapered look via stack)
+  g.add(box(18, 3, 18, ZINC, 0, 80)); // second deck
+  g.add(box(10, 60, 10, ZINC, 0, 110));
+  g.add(cyl(3, 40, ZINC, 0, 158, 0, 6));
+  g.add(cone(2, 16, ZINC, 0, 184, 0, 6)); // spire
   return g;
 }
 
-function arc(): THREE.Group {
+function arcdetriomphe(): THREE.Group {
   const g = new THREE.Group();
-  const c = COLORS.landmarkStone;
-  const W = 44, H = 48, D = 22, leg = 12, archW = W - leg * 2;
-  // Two legs + top lintel = an arch.
-  g.add(box(leg, H, D, c, H / 2));
-  const left = box(leg, H, D, c, H / 2); left.position.x = -(archW / 2 + leg / 2); g.add(left);
-  const right = box(leg, H, D, c, H / 2); right.position.x = archW / 2 + leg / 2; g.add(right);
-  g.add(box(W, 14, D, c, H - 7));
+  const W = 46, H = 50, D = 24, leg = 13;
+  g.add(box(leg, H, D, STONE, -(W / 2 - leg / 2), H / 2));
+  g.add(box(leg, H, D, STONE, W / 2 - leg / 2, H / 2));
+  g.add(box(W, 16, D, STONE, 0, H - 8)); // top lintel
+  g.add(box(W + 4, 8, D + 4, STONE, 0, H + 4)); // attic / cornice
+  // Vault hint.
+  g.add(box(W - leg * 2, H - 18, 4, 0x6a6258, 0, (H - 18) / 2, 0));
   return g;
 }
 
 function louvre(): THREE.Group {
   const g = new THREE.Group();
-  const c = COLORS.landmarkStone;
-  // Long low U-shaped palace wings.
-  g.add(box(120, 22, 26, c, 11)); // north wing
-  const s1 = box(26, 22, 80, c, 11); s1.position.set(-47, 0, 53); g.add(s1);
-  const s2 = box(26, 22, 80, c, 11); s2.position.set(47, 0, 53); g.add(s2);
-  // Glass pyramid.
-  const pyr = new THREE.Mesh(new THREE.ConeGeometry(14, 20, 4), flat(0x9fd0e0));
-  pyr.position.set(0, 10, 50); pyr.rotation.y = Math.PI / 4; g.add(pyr);
+  g.add(box(120, 22, 26, STONE, 0, 11, -34)); // long wing
+  g.add(box(26, 22, 84, STONE, -47, 11, 12));
+  g.add(box(26, 22, 84, STONE, 47, 11, 12));
+  const pyr = new THREE.Mesh(new THREE.ConeGeometry(13, 20, 4), flat(0x9fd0e0));
+  pyr.rotation.y = Math.PI / 4;
+  pyr.position.set(0, 10, 18);
+  g.add(pyr);
   return g;
 }
 
 function notredame(): THREE.Group {
   const g = new THREE.Group();
-  const c = COLORS.landmarkStone;
-  g.add(box(34, 30, 70, c, 15)); // nave
-  const t1 = box(14, 56, 14, c, 28); t1.position.set(-10, 0, -38); g.add(t1);
-  const t2 = box(14, 56, 14, c, 28); t2.position.set(10, 0, -38); g.add(t2);
-  // Spire.
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(4, 30, 6), flat(COLORS.landmarkZinc));
-  spire.position.set(0, 45, 6); g.add(spire);
+  g.add(box(30, 26, 64, STONE, 0, 13, 6)); // nave
+  g.add(box(15, 50, 15, STONE, -9, 25, -32)); // west towers
+  g.add(box(15, 50, 15, STONE, 9, 25, -32));
+  g.add(box(13, 13, 2, 0x6a6258, 0, 30, -39)); // rose window
+  g.add(cone(4, 28, ZINC, 0, 44, 8, 8)); // spire
+  // Flying-buttress hint.
+  for (const z of [-6, 12, 26]) {
+    g.add(box(3, 14, 3, STONE, -18, 8, z));
+    g.add(box(3, 14, 3, STONE, 18, 8, z));
+  }
   return g;
 }
 
 function sacrecoeur(): THREE.Group {
   const g = new THREE.Group();
-  const c = 0xf2efe6; // white travertine
-  g.add(box(50, 26, 50, c, 13));
-  // Central + side domes.
-  const dome = (r: number, x: number, z: number, y: number) => {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), flat(c));
-    m.position.set(x, y, z); return m;
-  };
-  g.add(dome(14, 0, 0, 26));
-  g.add(box(10, 30, 10, c, 15)); // drum under main dome
-  g.add(dome(7, -20, -16, 26));
-  g.add(dome(7, 20, -16, 26));
+  g.add(box(52, 22, 44, WHITE, 0, 11));
+  g.add(cyl(9, 16, WHITE, 0, 26, 0)); // central drum
+  g.add(dome(11, WHITE, 0, 34));
+  g.add(cone(2.5, 8, WHITE, 0, 47)); // lantern
+  for (const [x, z] of [[-20, -14], [20, -14], [-20, 14], [20, 14]]) {
+    g.add(cyl(4, 8, WHITE, x, 24, z));
+    g.add(dome(5, WHITE, x, 28, z));
+  }
   return g;
 }
 
 function concorde(): THREE.Group {
   const g = new THREE.Group();
-  // Luxor obelisk.
-  const ob = box(3, 34, 3, COLORS.landmarkGold, 17);
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(2.2, 5, 4), flat(COLORS.landmarkGold));
-  cap.position.y = 36.5; cap.rotation.y = Math.PI / 4;
-  g.add(ob); g.add(cap);
-  g.add(box(8, 3, 8, COLORS.landmarkStone, 1.5)); // base
+  g.add(box(8, 3, 8, STONE, 0, 1.5));
+  g.add(box(3, 34, 3, GOLD, 0, 18));
+  g.add(cone(2.2, 5, GOLD, 0, 37, 0, 4));
+  g.add(cyl(6, 1, 0x6a93a8, -22, 0.5, 0)); // fountains
+  g.add(cyl(6, 1, 0x6a93a8, 22, 0.5, 0));
+  return g;
+}
+
+function opera(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(54, 24, 38, STONE, 0, 12));
+  g.add(colonnade(7, 6, 1.6, 14, 19, 0xcabfa6)); // front facade columns
+  g.add(box(56, 5, 40, GOLD, 0, 26)); // gilt frieze
+  g.add(cyl(11, 6, 0x5d7a52, 0, 31, -4)); // green dome drum
+  g.add(dome(11, 0x4f6b46, 0, 37, -4));
+  return g;
+}
+
+function pantheon(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(40, 20, 50, STONE, 0, 10));
+  g.add(colonnade(6, 6, 2, 20, 25, STONE)); // portico
+  g.add(box(34, 6, 6, STONE, 0, 22, 25)); // pediment base
+  g.add(cyl(13, 16, STONE, 0, 30, -2, 16)); // drum
+  g.add(dome(13, ZINC, 0, 46, -2));
+  g.add(cone(2, 8, GOLD, 0, 60, -2));
+  return g;
+}
+
+function invalides(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(70, 20, 40, STONE, 0, 10));
+  g.add(cyl(12, 22, STONE, 0, 28, 0, 16)); // drum
+  g.add(dome(13, GOLD, 0, 39)); // golden dome
+  g.add(cone(2.5, 12, GOLD, 0, 56));
+  return g;
+}
+
+function madeleine(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(34, 4, 64, STONE, 0, 2)); // stylobate
+  // Surrounding colonnade (front + back rows).
+  g.add(colonnade(8, 4.2, 1.7, 24, 30, 0xcabfa6));
+  g.add(colonnade(8, 4.2, 1.7, 24, -30, 0xcabfa6));
+  g.add(box(34, 5, 64, STONE, 0, 27)); // roof
+  return g;
+}
+
+function grandpalais(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(90, 18, 44, STONE, 0, 9));
+  g.add(colonnade(10, 8, 1.6, 16, 22, 0xcabfa6));
+  // Glass barrel roof.
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 70, 16, 1, false, 0, Math.PI), flat(0x8fc7d8));
+  glass.rotation.z = Math.PI / 2;
+  glass.position.set(0, 18, 0);
+  g.add(glass);
+  return g;
+}
+
+function montparnasse(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(26, 120, 18, 0x2c3038, 0, 60)); // dark modern tower
+  g.add(box(28, 6, 20, 0x44484f, 0, 3));
   return g;
 }
 
 const BUILDERS: Record<string, () => THREE.Group> = {
-  eiffel, arc, louvre, notredame, sacrecoeur, concorde,
+  eiffel,
+  arcdetriomphe,
+  arc: arcdetriomphe,
+  louvre,
+  notredame,
+  sacrecoeur,
+  concorde,
+  opera,
+  pantheon,
+  invalides,
+  madeleine,
+  grandpalais,
+  montparnasse,
 };
 
 export function buildLandmark(def: LandmarkDef): THREE.Group {

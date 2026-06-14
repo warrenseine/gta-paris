@@ -50,18 +50,45 @@ function facadeTexture(): THREE.Texture {
   return tex;
 }
 
-const buildingCache = new Map<number, THREE.MeshLambertMaterial>();
-export function buildingMaterial(color: number): THREE.MeshLambertMaterial {
-  let m = buildingCache.get(color);
-  if (!m) {
-    m = new THREE.MeshLambertMaterial({ color, map: facadeTexture() });
-    buildingCache.set(color, m);
+// Zinc rooftop: grey base with a few darker units/skylights.
+let roofTex: THREE.Texture | null = null;
+function roofTexture(): THREE.Texture {
+  if (roofTex) return roofTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#8f97a0';
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.fillStyle = '#767e87';
+  ctx.fillRect(8, 10, 18, 12); // rooftop unit
+  ctx.fillRect(38, 30, 16, 20);
+  ctx.fillStyle = '#5e656d';
+  ctx.fillRect(30, 8, 6, 6); // vent
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  roofTex = tex;
+  return tex;
+}
+
+// Per-palette material array for the building box: walls = facade, top = roof,
+// bottom = plain. BoxGeometry group order: +x,-x,+y(top),-y(bottom),+z,-z.
+const buildingCache = new Map<number, THREE.MeshLambertMaterial[]>();
+export function buildingMaterials(color: number): THREE.MeshLambertMaterial[] {
+  let arr = buildingCache.get(color);
+  if (!arr) {
+    const wall = new THREE.MeshLambertMaterial({ color, map: facadeTexture() });
+    const roof = new THREE.MeshLambertMaterial({ color: 0xb8bdc4, map: roofTexture() });
+    const base = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
+    arr = [wall, wall, roof, base, wall, wall];
+    buildingCache.set(color, arr);
   }
-  return m;
+  return arr;
 }
 
 export const COLORS = {
   ground: 0x3a4150,
+  park: 0x3f6b42,
   road: 0x2b2f37,
   river: 0x3f86b0,
   bridge: 0x6b6f76,
