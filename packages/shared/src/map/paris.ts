@@ -250,17 +250,30 @@ function inPark(x: number, z: number, margin: number): boolean {
   return false;
 }
 
-// Deck EVERY span where ANY road (avenues + the Périphérique) runs over open
-// water, so no road ever fords the Seine. March along each road, find the
-// contiguous wet spans, and lay a deck covering each span plus a bank margin.
-function buildBridges() {
-  const out: { x: number; z: number; rotationY: number; length: number; width: number }[] = [];
+type Bridge = { x: number; z: number; rotationY: number; length: number; width: number };
+
+function inDeck(px: number, pz: number, b: Bridge): boolean {
+  const cos = Math.cos(b.rotationY);
+  const sin = Math.sin(b.rotationY);
+  const dx = px - b.x;
+  const dz = pz - b.z;
+  const lx = cos * dx - sin * dz;
+  const lz = sin * dx + cos * dz;
+  return Math.abs(lx) <= b.length / 2 && Math.abs(lz) <= b.width / 2;
+}
+
+// Deck every span where a road runs over open water, then keep only a MINIMAL
+// set of decks that still covers all crossings (greedy by area) — so the many
+// roads converging on the île don't pile up a tangle of redundant bridges.
+function buildBridges(): Bridge[] {
   const wet = (x: number, z: number) => {
     for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
       if (distToSeg(x, z, SEINE_POINTS[i], SEINE_POINTS[i + 1]) < SEINE_WIDTH / 2) return true;
     }
     return false;
   };
+  const cands: Bridge[] = [];
+  const wetPts: Vec2[] = [];
   for (const r of ROADS) {
     const dx = r.to.x - r.from.x;
     const dz = r.to.z - r.from.z;
@@ -274,24 +287,41 @@ function buildBridges() {
     let spanStart = -1;
     const deck = (d0: number, d1: number) => {
       const mid = (d0 + d1) / 2;
-      out.push({
-        x: r.from.x + ux * mid,
-        z: r.from.z + uz * mid,
-        rotationY,
-        length: d1 - d0 + 26, // ~13m onto each bank
-        width,
-      });
+      cands.push({ x: r.from.x + ux * mid, z: r.from.z + uz * mid, rotationY, length: d1 - d0 + 26, width });
     };
     for (let i = 0; i <= steps; i++) {
       const d = (len * i) / steps;
-      const isWet = wet(r.from.x + ux * d, r.from.z + uz * d);
-      if (isWet && spanStart < 0) spanStart = d;
-      else if (!isWet && spanStart >= 0) {
+      const px = r.from.x + ux * d;
+      const pz = r.from.z + uz * d;
+      const isWet = wet(px, pz);
+      if (isWet) {
+        wetPts.push({ x: px, z: pz });
+        if (spanStart < 0) spanStart = d;
+      } else if (spanStart >= 0) {
         deck(spanStart, d);
         spanStart = -1;
       }
     }
     if (spanStart >= 0) deck(spanStart, len);
+  }
+
+  // Greedy minimal cover: biggest decks first, drop any that cover no new water.
+  cands.sort((a, b) => b.length * b.width - a.length * a.width);
+  const covered = new Array(wetPts.length).fill(false);
+  const out: Bridge[] = [];
+  for (const b of cands) {
+    let useful = false;
+    for (let i = 0; i < wetPts.length; i++) {
+      if (!covered[i] && inDeck(wetPts[i].x, wetPts[i].z, b)) {
+        useful = true;
+        break;
+      }
+    }
+    if (!useful) continue;
+    for (let i = 0; i < wetPts.length; i++) {
+      if (!covered[i] && inDeck(wetPts[i].x, wetPts[i].z, b)) covered[i] = true;
+    }
+    out.push(b);
   }
   return out;
 }
