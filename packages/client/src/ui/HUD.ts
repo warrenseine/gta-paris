@@ -9,7 +9,7 @@ export interface HudState {
   deaths: number;
   dead: boolean;
   respawnIn: number;
-  wanted: boolean;
+  stars: number; // wanted level 0..5
 }
 
 export interface ScoreRow {
@@ -45,9 +45,9 @@ export class HUD {
     this.weapon = this.panel('right:18px;bottom:18px;font-size:20px;text-align:right;');
     this.score = this.panel('right:18px;top:14px;font-size:16px;text-align:right;opacity:.9;');
     this.wanted = this.panel(
-      'top:14px;left:50%;transform:translateX(-50%);font-size:20px;font-weight:800;color:#ff3b3b;display:none;',
+      'top:12px;left:50%;transform:translateX(-50%);font-size:24px;font-weight:800;color:#ffd23b;' +
+        'letter-spacing:3px;display:none;text-shadow:0 0 6px rgba(255,90,0,.8);',
     );
-    this.wanted.textContent = '★ WANTED ★';
     this.hint = this.panel(
       'left:50%;transform:translateX(-50%);bottom:18px;font-size:14px;opacity:.85;text-align:center;',
     );
@@ -78,7 +78,9 @@ export class HUD {
     this.weapon.textContent = `${s.weapon}  ${s.ammo}`;
     this.score.textContent = `K ${s.kills}  /  D ${s.deaths}`;
     this.hint.textContent = s.hint;
-    this.wanted.style.display = s.wanted ? 'block' : 'none';
+    const stars = Math.max(0, Math.min(5, s.stars | 0));
+    this.wanted.style.display = stars > 0 ? 'block' : 'none';
+    if (stars > 0) this.wanted.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
 
     if (s.dead) {
       this.overlay.style.display = 'flex';

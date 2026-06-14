@@ -9,6 +9,7 @@ import {
   resolveAgainstBuildings,
   overWater,
   weapon,
+  SHELL,
   TICK_RATE,
   DT,
   MSG,
@@ -33,6 +34,7 @@ import {
   NPC_PED,
   NPC_COP,
   NPC_POLICE,
+  NPC_TANK,
   type NpcSimState,
 } from '../sim/NpcSim.js';
 
@@ -48,6 +50,7 @@ export class PlayerState extends Schema {
   @type('number') stamina = 100;
   @type('boolean') alive = true;
   @type('boolean') wanted = false;
+  @type('uint8') stars = 0; // wanted level 0..5
   @type('number') weaponId = 1;
   @type('number') ammo = 12;
   @type('number') kills = 0;
@@ -63,6 +66,7 @@ export class VehicleState extends Schema {
   @type('number') rotY = 0;
   @type('number') speed = 0;
   @type('number') colorId = 0;
+  @type('uint8') kind = 0; // 0 = car, 1 = police, 2 = tank
   @type('string') driverId = '';
 }
 
@@ -152,7 +156,10 @@ export class ParisRoom extends Room<GameState> {
   private vjCounter = 0; // carjacked-vehicle id counter
   private ejectCounter = 0;
   private copCounter = 0;
-  private wantedUntil = new Map<string, number>(); // playerId -> tick the heat ends
+  private tankCounter = 0;
+  private dispatchCounter = 0;
+  // playerId -> wanted level (1..5) + tick the heat expires.
+  private stars = new Map<string, { n: number; until: number }>();
 
   private addNpcState(n: NpcSimState) {
     const ns = new NpcState();
@@ -289,9 +296,10 @@ export class ParisRoom extends Room<GameState> {
       }
     }
     for (const n of this.npcSims) {
-      if (n.dead || n.kind !== NPC_CAR) continue;
+      if (n.dead || (n.kind !== NPC_CAR && n.kind !== NPC_POLICE && n.kind !== NPC_TANK)) continue;
+      const reach = n.kind === NPC_TANK ? 14 : 10; // tanks are big — grab from further
       const d = Math.hypot(n.x - sim.foot.x, n.z - sim.foot.z);
-      if (d < bestD) {
+      if (d < Math.min(bestD, reach)) {
         bestD = d;
         bestNpc = n;
         bestVid = '';
@@ -325,11 +333,12 @@ export class ParisRoom extends Room<GameState> {
     dp.vehicleId = '';
   }
 
-  /** Take an NPC traffic car: spawn its ejected driver, convert it to a player vehicle. */
+  /** Take an NPC vehicle (traffic / police / tank): eject its driver, convert it. */
   private carjackNpcCar(npc: NpcSimState, id: string, ps: PlayerState) {
-    // Ejected driver ped beside the car.
+    // Ejected driver beside the vehicle.
     this.spawnEjectedPed(npc.x + Math.cos(npc.rotY) * 3, npc.z - Math.sin(npc.rotY) * 3);
-    // New player vehicle at the car's pose.
+    // New player vehicle at the car's pose, keeping its breed (police / tank).
+    const kind = npc.kind === NPC_TANK ? 2 : npc.kind === NPC_POLICE ? 1 : 0;
     const vid = `vj${this.vjCounter++}`;
     const vs = new VehicleState();
     vs.id = vid;
@@ -337,14 +346,18 @@ export class ParisRoom extends Room<GameState> {
     vs.z = npc.z;
     vs.rotY = npc.rotY;
     vs.colorId = npc.colorId;
+    vs.kind = kind;
     vs.driverId = id;
     this.state.vehicles.set(vid, vs);
     this.cars.set(vid, { x: npc.x, z: npc.z, rotY: npc.rotY, speed: 0 });
-    this.carHp.set(vid, CAR_MAX_HP);
+    this.carHp.set(vid, kind === 2 ? 320 : CAR_MAX_HP);
     ps.vehicleId = vid;
-    // Retire the NPC car (regenerates as traffic later).
+    // Stealing the law is a crime — instant heat.
+    if (kind === 1) this.addStars(id, 1);
+    if (kind === 2) this.addStars(id, 3);
+    // Retire the NPC (regenerates later for traffic; dispatched units don't).
     npc.dead = true;
-    npc.respawnAt = this.state.serverTick + 14 * TICK_RATE;
+    npc.respawnAt = npc.kind === NPC_CAR ? this.state.serverTick + 14 * TICK_RATE : Number.MAX_SAFE_INTEGER;
     this.state.npcs.delete(npc.id);
   }
 
@@ -381,7 +394,10 @@ export class ParisRoom extends Room<GameState> {
     const sim = this.sims.get(client.sessionId);
     if (!shooter || !sim || !shooter.alive) return; // firing from a car is allowed
 
-    const w = weapon(shooter.weaponId);
+    // Driving a tank? The main gun fires explosive shells, not bullets.
+    const drivingVeh = shooter.vehicleId ? this.state.vehicles.get(shooter.vehicleId) : undefined;
+    const isTank = drivingVeh?.kind === 2;
+    const w = isTank ? weapon(SHELL.weaponId) : weapon(shooter.weaponId);
     const tick = this.state.serverTick;
     // Rate limit + ammo.
     const minInterval = Math.max(1, Math.floor(TICK_RATE / w.fireRate) - 1);
@@ -392,11 +408,21 @@ export class ParisRoom extends Room<GameState> {
 
     // Firing near police -> wanted.
     for (const n of this.npcSims) {
-      if (n.dead || (n.kind !== NPC_POLICE && n.kind !== NPC_COP)) continue;
+      if (n.dead || (n.kind !== NPC_POLICE && n.kind !== NPC_COP && n.kind !== NPC_TANK)) continue;
       if (Math.hypot(n.x - shooter.x, n.z - shooter.z) < POLICE_SIGHT) {
-        this.wantedUntil.set(client.sessionId, tick + WANTED_TICKS);
+        this.addStars(client.sessionId, 1);
         break;
       }
+    }
+
+    if (isTank) {
+      // Lob a shell: find the first thing the aim line hits, blow it up there.
+      const impact = castRay(msg.ox, msg.oz, msg.dx, msg.dz, w.range, [], this.city.buildings);
+      const ix = impact ? impact.x : msg.ox + msg.dx * w.range;
+      const iz = impact ? impact.z : msg.oz + msg.dz * w.range;
+      this.explodeAt(ix, iz, client.sessionId);
+      this.broadcast(MSG.fireEvent, { ox: msg.ox, oz: msg.oz, tx: ix, tz: iz, hit: true, weaponId: SHELL.weaponId });
+      return;
     }
 
     // Rewind targets to the tick the client was seeing.
@@ -458,7 +484,13 @@ export class ParisRoom extends Room<GameState> {
       if (npc.hp <= 0) {
         npc.dead = true;
         const ns = this.state.npcs.get(npc.id);
-        if (npc.kind === NPC_CAR || npc.kind === NPC_POLICE) {
+        // Killing the law raises heat (cops worth more than a squad car).
+        if (this.state.players.has(killerId)) {
+          if (npc.kind === NPC_COP) this.addStars(killerId, 2);
+          else if (npc.kind === NPC_POLICE) this.addStars(killerId, 1);
+          else if (npc.kind === NPC_TANK) this.addStars(killerId, 2);
+        }
+        if (npc.kind === NPC_CAR || npc.kind === NPC_POLICE || npc.kind === NPC_TANK) {
           this.broadcast(MSG.explosion, { x: npc.x, z: npc.z });
           npc.respawnAt = this.state.serverTick + 12 * TICK_RATE;
           this.state.npcs.delete(npc.id);
@@ -481,6 +513,30 @@ export class ParisRoom extends Room<GameState> {
     if (!victim || !victim.alive) return;
     victim.health -= dmg;
     if (victim.health <= 0) this.killPlayer(victimId, killerId);
+  }
+
+  /** Tank shell blast: area damage to players, vehicles and NPCs around a point. */
+  private explodeAt(x: number, z: number, killerId: string) {
+    this.broadcast(MSG.explosion, { x, z });
+    const R = SHELL.radius;
+    const kv = this.state.players.get(killerId)?.vehicleId;
+    for (const [pid, p] of this.state.players) {
+      if (!p.alive || p.vehicleId) continue; // in-car damage routed via the vehicle
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d > R) continue;
+      p.health -= SHELL.damage * (1 - d / R);
+      if (p.health <= 0) this.killPlayer(pid, killerId);
+    }
+    for (const [vid, v] of this.state.vehicles) {
+      if (vid === kv) continue; // not your own tank
+      const d = Math.hypot(v.x - x, v.z - z);
+      if (d <= R) this.damageCar(vid, SHELL.damage * (1 - d / R), killerId);
+    }
+    for (const n of this.npcSims) {
+      if (n.dead) continue;
+      const d = Math.hypot(n.x - x, n.z - z);
+      if (d <= R) this.applyDamage(killerId, n.id, SHELL.damage * (1 - d / R));
+    }
   }
 
   private killPlayer(victimId: string, killerId: string) {
@@ -624,7 +680,8 @@ export class ParisRoom extends Room<GameState> {
       ps.vz = sim.foot.vz;
       ps.rotY = sim.foot.rotY;
       ps.stamina = sim.foot.stamina;
-      ps.wanted = (this.wantedUntil.get(id) ?? 0) > tickNo;
+      ps.stars = this.starsOf(id);
+      ps.wanted = ps.stars > 0;
       ps.lastProcessedInputSeq = lastSeq;
 
       // Record lag-comp history.
@@ -657,6 +714,7 @@ export class ParisRoom extends Room<GameState> {
       }
       if (n.kind === NPC_POLICE) this.stepPolice(n);
       else if (n.kind === NPC_COP) this.stepCop(n, tickNo);
+      else if (n.kind === NPC_TANK) this.stepTank(n);
       else stepNpc(n, DT, this.city, tickNo);
       const ns = this.state.npcs.get(n.id);
       if (ns) {
@@ -689,6 +747,10 @@ export class ParisRoom extends Room<GameState> {
       for (const ped of this.npcSims) {
         if (ped.dead || (ped.kind !== NPC_PED && ped.kind !== NPC_COP)) continue;
         if (Math.hypot(ped.x - car.x, ped.z - car.z) > CAR.radius + 0.8) continue;
+        // Vehicular manslaughter raises heat (mowing a cop earns more).
+        if (car.driverId && this.state.players.has(car.driverId)) {
+          this.addStars(car.driverId, ped.kind === NPC_COP ? 2 : 1);
+        }
         ped.dead = true;
         ped.x += Math.sin(car.rotY) * 5;
         ped.z += Math.cos(car.rotY) * 5;
@@ -720,8 +782,90 @@ export class ParisRoom extends Room<GameState> {
     }
   }
 
+  /** Current wanted level (0 if the heat has expired). */
+  private starsOf(pid: string): number {
+    const e = this.stars.get(pid);
+    return e && e.until > this.state.serverTick ? e.n : 0;
+  }
+
   private isWanted(pid: string): boolean {
-    return (this.wantedUntil.get(pid) ?? 0) > this.state.serverTick;
+    return this.starsOf(pid) > 0;
+  }
+
+  /** Raise a player's wanted level, refresh the heat timer, and dispatch heat. */
+  private addStars(pid: string, by: number) {
+    const cur = this.starsOf(pid);
+    const n = Math.min(5, cur + by);
+    if (n <= 0) return;
+    this.stars.set(pid, { n, until: this.state.serverTick + WANTED_TICKS });
+    const ps = this.state.players.get(pid);
+    if (!ps) return;
+    // Escalating response: extra patrol cars at 3+, an army tank at 5.
+    if (n > cur) {
+      for (let lvl = cur + 1; lvl <= n; lvl++) {
+        if (lvl >= 3) this.spawnPoliceNear(ps.x, ps.z);
+        if (lvl >= 5) this.spawnTankNear(ps.x, ps.z, pid);
+      }
+    }
+  }
+
+  /** Count of live NPCs of a kind (caps escalation spam). */
+  private countNpc(kind: number): number {
+    let n = 0;
+    for (const s of this.npcSims) if (!s.dead && s.kind === kind) n++;
+    return n;
+  }
+
+  private spawnPoliceNear(x: number, z: number) {
+    if (this.countNpc(NPC_POLICE) >= 8) return;
+    const a = Math.random() * Math.PI * 2;
+    const px = x + Math.cos(a) * 90;
+    const pz = z + Math.sin(a) * 90;
+    const n = this.blankNpc(`pol${this.dispatchCounter++}`, NPC_POLICE, px, pz);
+    n.hp = 70;
+    n.speed = 16;
+    n.path = [{ x: px, z: pz }, { x, z }]; // roll toward the action
+    this.npcSims.push(n);
+    this.npcById.set(n.id, n);
+    this.addNpcState(n);
+  }
+
+  private spawnTankNear(x: number, z: number, targetId: string) {
+    if (this.countNpc(NPC_TANK) >= 1) return; // one tank at a time
+    const a = Math.random() * Math.PI * 2;
+    const tx = x + Math.cos(a) * 120;
+    const tz = z + Math.sin(a) * 120;
+    const n = this.blankNpc(`tank${this.tankCounter++}`, NPC_TANK, tx, tz);
+    n.hp = 320;
+    n.speed = 0;
+    n.targetId = targetId;
+    this.npcSims.push(n);
+    this.npcById.set(n.id, n);
+    this.addNpcState(n);
+  }
+
+  private blankNpc(id: string, kind: number, x: number, z: number): NpcSimState {
+    return {
+      id,
+      kind,
+      x,
+      z,
+      rotY: 0,
+      colorId: 0,
+      hp: 70,
+      dead: false,
+      respawnAt: Number.MAX_SAFE_INTEGER, // dispatched units don't auto-respawn
+      tx: 0,
+      tz: 0,
+      repathAt: 0,
+      path: [],
+      seg: 0,
+      dir: 1,
+      speed: 0,
+      targetId: '',
+      fireCd: 0,
+      deployed: false,
+    };
   }
 
   /** Nearest alive wanted player to a point, within range. */
@@ -746,7 +890,9 @@ export class ParisRoom extends Room<GameState> {
       n.speed *= 0.7; // brake to a stop
       n.rotY = Math.atan2(target.x - n.x, target.z - n.z);
       if (!n.deployed) {
-        this.deployCop(n.x + 3, n.z + 3, target.id);
+        // More heat = more boots on the ground.
+        const squad = Math.max(1, Math.min(this.starsOf(target.id), 3));
+        for (let i = 0; i < squad; i++) this.deployCop(n.x + 3 + i * 2.2, n.z + 3, target.id);
         n.deployed = true;
       }
     } else {
@@ -811,6 +957,32 @@ export class ParisRoom extends Room<GameState> {
       this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx: ps.x, tz: ps.z, hit: true, weaponId: 1 });
     }
     void tickNo;
+  }
+
+  /** Army tank: grind toward the wanted player and lob shells. Idle = carjackable. */
+  private stepTank(n: NpcSimState) {
+    const ps = this.state.players.get(n.targetId);
+    if (!ps || !ps.alive || !this.isWanted(n.targetId)) {
+      n.speed *= 0.9; // stand down, wait to be stolen or for a fresh target
+      return;
+    }
+    const dx = ps.x - n.x;
+    const dz = ps.z - n.z;
+    const d = Math.hypot(dx, dz) || 1;
+    n.rotY = Math.atan2(dx, dz);
+    const FIRE = 70;
+    if (d > FIRE * 0.8) {
+      const sp = 7; // slow and menacing
+      const r = resolveAgainstBuildings({ x: n.x + (dx / d) * sp * DT, z: n.z + (dz / d) * sp * DT, r: CAR.radius }, this.city.buildings);
+      n.x = r.x;
+      n.z = r.z;
+    }
+    n.fireCd -= DT;
+    if (d < FIRE && n.fireCd <= 0) {
+      n.fireCd = 2.4;
+      this.explodeAt(ps.x, ps.z, n.id);
+      this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx: ps.x, tz: ps.z, hit: true, weaponId: SHELL.weaponId });
+    }
   }
 
   /** Server-side car-vs-car separation (player vehicles + NPC traffic). */

@@ -20,7 +20,12 @@ export const WEAPONS: Record<number, WeaponDef> = {
   1: { id: 1, name: 'Pistol', damage: 18, fireRate: 4, range: 80, spread: 0.02, magazine: 12, pellets: 1 },
   2: { id: 2, name: 'SMG', damage: 11, fireRate: 12, range: 70, spread: 0.06, magazine: 30, pellets: 1 },
   3: { id: 3, name: 'Shotgun', damage: 9, fireRate: 1.2, range: 30, spread: 0.18, magazine: 8, pellets: 7 },
+  // Tank main gun: lobs an explosive shell (AoE handled server-side, not hitscan damage).
+  9: { id: 9, name: 'Cannon', damage: 0, fireRate: 0.8, range: 130, spread: 0, magazine: Infinity, pellets: 1 },
 };
+
+/** Tank shell blast radius + peak damage (server applies it as area damage). */
+export const SHELL = { radius: 9, damage: 120, weaponId: 9 };
 
 export function weapon(id: number): WeaponDef {
   return WEAPONS[id] ?? WEAPONS[0];

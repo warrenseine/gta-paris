@@ -16,6 +16,7 @@ export interface LocalPlayerFields {
   health: number;
   stamina: number;
   wanted: boolean;
+  stars: number;
   alive: boolean;
   weaponId: number;
   ammo: number;
@@ -30,6 +31,7 @@ export interface VehicleFields {
   speed: number;
   driverId: string;
   colorId: number;
+  kind: number; // 0 = car, 1 = police, 2 = tank
 }
 
 // Bridges Colyseus room state -> Three.js scene for remote players and all
@@ -64,6 +66,7 @@ export class EntityManager {
             health: player.health,
             stamina: player.stamina,
             wanted: player.wanted,
+            stars: player.stars,
             alive: player.alive,
             weaponId: player.weaponId,
             ammo: player.ammo,
@@ -88,7 +91,7 @@ export class EntityManager {
     });
 
     $(state).vehicles.onAdd((v: any, id: string) => {
-      const ve = new VehicleEntity(this.scene, v.colorId);
+      const ve = new VehicleEntity(this.scene, v.colorId, v.kind);
       this.vehicles.set(id, ve);
       ve.mesh.position.set(v.x, 0, v.z);
       ve.mesh.rotation.y = v.rotY;
@@ -100,6 +103,7 @@ export class EntityManager {
           speed: v.speed,
           driverId: v.driverId,
           colorId: v.colorId,
+          kind: v.kind,
         });
         ve.interp.push(v.x, v.z, v.rotY, performance.now());
       };

@@ -54,6 +54,7 @@ export class Game {
   private aimX = 0;
   private aimZ = 1;
   private fireCd = 0;
+  private lastShot = 0;
   private lockedPos: { x: number; z: number } | null = null;
   private visor: HTMLDivElement;
   private tmpVec = new THREE.Vector3();
@@ -226,9 +227,10 @@ export class Game {
     else this.footPred.predict(cmd, dt, this.world);
     this.conn.sendInput(cmd);
 
-    const wId = this.local?.weaponId ?? 1;
+    const isTank = this.drivingId != null && this.entities.vehicleStates.get(this.drivingId)?.kind === 2;
+    const wId = isTank ? 9 : this.local?.weaponId ?? 1; // tank fires its cannon
     const ammo = this.local?.ammo ?? 0;
-    if (cmd.fire && this.fireCd <= 0 && ammo > 0) {
+    if (cmd.fire && this.fireCd <= 0 && (isTank || ammo > 0)) {
       // Auto-aim (foot + car): snap to the locked target, else fire along aim.
       const aim = this.aimDir();
       let ax = aim.x;
@@ -263,9 +265,31 @@ export class Game {
   private shoot(seq: number, weaponId: number, aimX: number, aimZ: number) {
     const w = weapon(weaponId);
     this.fireCd = 1 / w.fireRate;
+    this.lastShot = performance.now();
 
     const ox = this.selfX + aimX * 0.8;
     const oz = this.selfZ + aimZ * 0.8;
+
+    if (weaponId === 9) {
+      // Tank shell: arcs out and detonates where the aim line first hits.
+      const impact = castRay(ox, oz, aimX, aimZ, w.range, [], this.city.buildings);
+      const ix = impact ? impact.x : ox + aimX * w.range;
+      const iz = impact ? impact.z : oz + aimZ * w.range;
+      this.effects.tracer(ox, oz, ix, iz);
+      this.effects.explosion(ix, iz);
+      this.audio.boom(0.6);
+      const shell: FireMessage = {
+        seq,
+        ox,
+        oz,
+        dx: aimX,
+        dz: aimZ,
+        weaponId,
+        clientTick: (this.conn.room.state as { serverTick?: number }).serverTick ?? 0,
+      };
+      this.conn.room.send(MSG.fire, shell);
+      return;
+    }
 
     // Cosmetic local tracer toward the nearest target or full range.
     const hit = castRay(ox, oz, aimX, aimZ, w.range, this.hitTargets(), this.city.buildings);
@@ -308,9 +332,21 @@ export class Game {
         ve.mesh.position.set(camX, 0, camZ);
         ve.mesh.rotation.y = rot;
       }
-      this.playerMesh.visible = false;
       lookX = Math.sin(rot); // camera leads toward car heading
       lookZ = Math.cos(rot);
+      // Drive-by: lean the character out the window while shooting from the car.
+      const shootingRecently = performance.now() - this.lastShot < 1200;
+      if (!dead && (shootingRecently || this.lockedPos)) {
+        const aim = this.aimDir();
+        const lx = Math.cos(rot); // car's left side (perpendicular to heading)
+        const lz = -Math.sin(rot);
+        this.playerMesh.position.set(camX + lx * 1.4, 0.7, camZ + lz * 1.4);
+        this.playerMesh.rotation.set(0, Math.atan2(aim.x, aim.z), 0);
+        this.playerMesh.visible = true;
+        animateWalk(this.playerMesh, 0, frameDt); // settle limbs to neutral
+      } else {
+        this.playerMesh.visible = false;
+      }
     } else {
       this.footPred.smooth(frameDt);
       camX = this.footPred.renderXAt(alpha);
@@ -445,13 +481,16 @@ export class Game {
     const respawnIn = Math.max(0, 3 - (performance.now() - this.deathTime) / 1000);
 
     const nearCar = !this.drivingId && !dead && this.nearestEnterableCar() < 10;
+    const isTank = this.drivingId != null && this.entities.vehicleStates.get(this.drivingId)?.kind === 2;
     this.hud.set({
       health: l?.health ?? 100,
       stamina: this.drivingId ? 100 : (this.footPred.state.stamina / PLAYER.maxStamina) * 100,
-      weapon: this.drivingId ? 'Driving' : w.name,
-      ammo: this.drivingId ? '' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
+      weapon: isTank ? 'Cannon' : this.drivingId ? 'Driving' : w.name,
+      ammo: isTank ? '∞' : this.drivingId ? '' : Number.isFinite(w.magazine) ? l?.ammo ?? 0 : '∞',
       hint: this.drivingId
-        ? `WASD drive · Y exit · Tab scores · ${online} online`
+        ? isTank
+          ? `WASD drive · fire cannon · Y exit · ${online} online`
+          : `WASD drive · Y exit · Tab scores · ${online} online`
         : nearCar
           ? `▶ Press F / Y to enter car`
           : `WASD move · A sprint · aim · shoot · ${online} online`,
@@ -459,7 +498,7 @@ export class Game {
       deaths: l?.deaths ?? 0,
       dead,
       respawnIn,
-      wanted: l?.wanted ?? false,
+      stars: l?.stars ?? 0,
     });
 
     const state = this.conn.room.state as any;

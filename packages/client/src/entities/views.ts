@@ -150,6 +150,31 @@ export function makePoliceCarMesh(): THREE.Group {
   return g;
 }
 
+// Army tank: hull + tracks + turret with a long gun barrel. +Z forward.
+export function makeTankMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const olive = 0x4b5320;
+  const dark = 0x3a4019;
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.1, 5.2), flat(olive));
+  hull.position.y = 0.9;
+  g.add(hull);
+  // Tracks down each side.
+  for (const sx of [-1, 1]) {
+    const track = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 5.6), flat(dark));
+    track.position.set(sx * 1.7, 0.5, 0);
+    g.add(track);
+  }
+  // Turret + barrel.
+  const turret = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 2.4), flat(0x555c28));
+  turret.position.set(0, 1.7, -0.3);
+  g.add(turret);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 3.4, 8), flat(0x2f3416));
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 1.8, 1.8);
+  g.add(barrel);
+  return g;
+}
+
 // Pickup: a glowing pad + an item shape that reads from above.
 // kind 1 = health (red cross); kind 0 = weapon (weaponId 1 pistol, 2 SMG, 3 shotgun).
 export function makePickupMesh(kind: number, weaponId: number): THREE.Group {

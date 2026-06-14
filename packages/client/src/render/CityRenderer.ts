@@ -85,12 +85,36 @@ export class CityRenderer {
     river.position.y = 0.14; // clearly above roads/ground
     this.group.add(river);
 
-    // Bridges.
+    // Bridges: a deck with side railings, pylons and top chords for verticality
+    // (built in local frame where +X is the deck's long axis, then rotated).
     for (const b of city.bridges) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(b.length, 1, b.width), flat(COLORS.bridge));
-      m.position.set(b.x, 0.4, b.z);
-      m.rotation.y = b.rotationY;
-      this.group.add(m);
+      const bg = new THREE.Group();
+      bg.position.set(b.x, 0, b.z);
+      bg.rotation.y = b.rotationY;
+      const hw = b.width / 2;
+
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(b.length, 1, b.width), flat(COLORS.bridge));
+      deck.position.y = 0.5;
+      bg.add(deck);
+
+      const railMat = flat(0x8a8f96);
+      const trussMat = flat(0x9a9088);
+      for (const s of [-1, 1]) {
+        // Solid side railing running the length of the deck.
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(b.length, 1.1, 0.5), railMat);
+        rail.position.set(0, 1.4, s * (hw - 0.3));
+        bg.add(rail);
+        // Pylons + a top chord along each side (lane stays clear between them).
+        for (const px of [-b.length * 0.28, b.length * 0.28]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 6, 0.8), trussMat);
+          post.position.set(px, 3.5, s * (hw - 0.4));
+          bg.add(post);
+        }
+        const chord = new THREE.Mesh(new THREE.BoxGeometry(b.length * 0.62, 0.6, 0.6), trussMat);
+        chord.position.set(0, 6.2, s * (hw - 0.4));
+        bg.add(chord);
+      }
+      this.group.add(bg);
     }
   }
 

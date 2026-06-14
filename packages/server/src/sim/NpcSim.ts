@@ -8,6 +8,7 @@ export const NPC_PED = 0;
 export const NPC_CAR = 1;
 export const NPC_COP = 2; // cop on foot
 export const NPC_POLICE = 3; // police car
+export const NPC_TANK = 4; // army tank (5-star response)
 
 export interface NpcSimState {
   id: string;
