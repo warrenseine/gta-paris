@@ -128,7 +128,11 @@ export class CityRenderer {
   }
 
   private buildRoads(city: CityData) {
-    const lineMat = flat(0xe6e6e0);
+    // Dash transforms collected across every road, drawn as one InstancedMesh.
+    const dashes: { x: number; z: number; angle: number }[] = [];
+    const DASH = 3; // dash length (m)
+    const GAP = 5; // gap between dashes (m)
+
     for (const r of city.roads) {
       const isPeriph = r.width >= 22; // the Périphérique is the widest road (4 lanes)
       for (let i = 0; i < r.points.length - 1; i++) {
@@ -147,20 +151,41 @@ export class CityRenderer {
         m.position.set(cx, 0.08, cz); // clearly above parks/ground
         this.group.add(m);
 
-        // White lane markings: a centre line for normal 2-lane streets; the
-        // Périphérique gets lane dividers too (4 lanes). Skip tiny stubs.
-        if (len < 8) continue;
+        // Dashed white lane markings: a centre line on normal streets; the
+        // Périphérique also gets lane dividers (4 lanes).
+        if (len < 10) continue;
         const ux = dx / len;
         const uz = dz / len;
+        const angle = Math.atan2(ux, uz); // heading for the dash's long axis
         const offsets = isPeriph ? [-r.width / 4, 0, r.width / 4] : [0];
+        const step = DASH + GAP;
         for (const off of offsets) {
-          const line = new THREE.Mesh(new THREE.PlaneGeometry(0.35, len - 4), lineMat);
-          line.rotation.x = -Math.PI / 2;
-          line.rotation.z = rotZ;
-          line.position.set(cx + -uz * off, 0.085, cz + ux * off);
-          this.group.add(line);
+          const ox = -uz * off;
+          const oz = ux * off;
+          for (let d = step; d < len - step; d += step) {
+            dashes.push({ x: a.x + ux * d + ox, z: a.z + uz * d + oz, angle });
+          }
         }
       }
+    }
+
+    if (dashes.length) {
+      const geo = new THREE.PlaneGeometry(0.4, DASH);
+      geo.rotateX(-Math.PI / 2); // lie flat in XZ (long axis = Z)
+      const inst = new THREE.InstancedMesh(geo, flat(0xe9e9e2), dashes.length);
+      const mtx = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const up = new THREE.Vector3(0, 1, 0);
+      const pos = new THREE.Vector3();
+      const one = new THREE.Vector3(1, 1, 1);
+      dashes.forEach((d, i) => {
+        q.setFromAxisAngle(up, d.angle);
+        pos.set(d.x, 0.13, d.z); // well above the road to avoid z-fighting
+        mtx.compose(pos, q, one);
+        inst.setMatrixAt(i, mtx);
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      this.group.add(inst);
     }
   }
 

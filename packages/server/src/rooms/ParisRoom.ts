@@ -136,7 +136,7 @@ const PICKUP_RESPAWN_TICKS = 8 * TICK_RATE;
 const PICKUP_RADIUS = 1.6;
 const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
 const CORPSE_TICKS = 7 * TICK_RATE; // how long a dead ped stays on the ground
-const WANTED_TICKS = 12 * TICK_RATE; // heat duration after firing near police
+const STAR_DECAY_TICKS = 22 * TICK_RATE; // time to shed ONE star while evading
 const POLICE_SIGHT = 130; // police notice gunfire within this range
 const COP_FIRE_RANGE = 45;
 const COP_DAMAGE = 10;
@@ -546,6 +546,7 @@ export class ParisRoom extends Room<GameState> {
     victim.health = 0;
     victim.alive = false;
     victim.deaths++;
+    this.stars.delete(victimId); // wasted — heat clears
     const killer = this.state.players.get(killerId);
     if (killer && killerId !== victimId) killer.kills++;
     const vScore = this.state.scores.get(victimId);
@@ -742,6 +743,7 @@ export class ParisRoom extends Room<GameState> {
     this.resolveCarCollisions();
     this.resolveRunOver(tickNo);
     this.updatePickups(tickNo);
+    this.decayStars(tickNo);
     this.updateInterest();
     this.state.serverTick++;
   }
@@ -798,10 +800,19 @@ export class ParisRoom extends Room<GameState> {
     }
   }
 
-  /** Current wanted level (0 if the heat has expired). */
+  /** Current wanted level. Stars fall off one at a time (see decayStars). */
   private starsOf(pid: string): number {
-    const e = this.stars.get(pid);
-    return e && e.until > this.state.serverTick ? e.n : 0;
+    return this.stars.get(pid)?.n ?? 0;
+  }
+
+  /** Shed one star per STAR_DECAY_TICKS of no fresh crime (gradual cooldown). */
+  private decayStars(tickNo: number) {
+    for (const [pid, e] of this.stars) {
+      if (tickNo < e.until) continue;
+      e.n -= 1;
+      if (e.n <= 0) this.stars.delete(pid);
+      else e.until = tickNo + STAR_DECAY_TICKS;
+    }
   }
 
   private isWanted(pid: string): boolean {
@@ -813,7 +824,7 @@ export class ParisRoom extends Room<GameState> {
     const cur = this.starsOf(pid);
     const n = Math.min(5, cur + by);
     if (n <= 0) return;
-    this.stars.set(pid, { n, until: this.state.serverTick + WANTED_TICKS });
+    this.stars.set(pid, { n, until: this.state.serverTick + STAR_DECAY_TICKS });
     const ps = this.state.players.get(pid);
     if (!ps) return;
     // Escalating response: extra patrol cars at 3+, an army tank at 5.
@@ -971,8 +982,8 @@ export class ParisRoom extends Room<GameState> {
     n.fireCd -= DT;
     if (d < COP_FIRE_RANGE && n.fireCd <= 0) {
       n.fireCd = 0.8;
-      // Cops aren't crack shots — they miss a good share of the time.
-      const miss = Math.random() < 0.4;
+      // Cops aren't crack shots — they miss roughly half their shots.
+      const miss = Math.random() < 0.5;
       let tx = ps.x;
       let tz = ps.z;
       if (miss) {

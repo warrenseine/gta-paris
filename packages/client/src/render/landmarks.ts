@@ -126,6 +126,10 @@ function notredame(): THREE.Group {
 
 function sacrecoeur(): THREE.Group {
   const g = new THREE.Group();
+  // Montmartre mound so the basilica sits on a hill instead of floating.
+  const hill = new THREE.Mesh(new THREE.CylinderGeometry(42, 58, 16, 18), flat(0x4a6b3f));
+  hill.position.y = -8; // top of the mound at y≈0 (basilica base)
+  g.add(hill);
   g.add(box(52, 22, 44, WHITE, 0, 11));
   g.add(cyl(9, 16, WHITE, 0, 26, 0)); // central drum
   g.add(dome(11, WHITE, 0, 34));

@@ -291,7 +291,7 @@ const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number; off?: Vec2; rotationY
   { key: 'eiffel', at: N.eiffel },
   { key: 'louvre', at: N.louvre },
   { key: 'notredame', at: N.notredame },
-  { key: 'sacrecoeur', at: N.sacrecoeur, y: 22 },
+  { key: 'sacrecoeur', at: N.sacrecoeur },
   { key: 'concorde', at: N.concorde },
   { key: 'opera', at: N.opera, off: { x: 6, z: -28 } },
   { key: 'pantheon', at: N.pantheon },

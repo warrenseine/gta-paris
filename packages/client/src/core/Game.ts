@@ -342,24 +342,39 @@ export class Game {
       }
       lookX = Math.sin(rot); // camera leads toward car heading
       lookZ = Math.cos(rot);
-      // Drive-by: lean the character out the window while shooting from the car.
+      // Drive-by: lean the bust out the window while shooting from the car.
       const shootingRecently = performance.now() - this.lastShot < 1200;
+      const legs = this.playerMesh.userData.walk as { lLeg: THREE.Object3D; rLeg: THREE.Object3D } | undefined;
       if (!dead && (shootingRecently || this.lockedPos)) {
         const aim = this.aimDir();
         const lx = Math.cos(rot); // car's left side (perpendicular to heading)
         const lz = -Math.sin(rot);
-        this.playerMesh.position.set(camX + lx * 1.4, 0.7, camZ + lz * 1.4);
-        this.playerMesh.rotation.set(0, Math.atan2(aim.x, aim.z), 0);
+        // Sit at the window; only the upper body shows above the car, leaning out.
+        this.playerMesh.position.set(camX + lx * 1.05, 0.55, camZ + lz * 1.05);
+        this.playerMesh.rotation.set(-0.25, Math.atan2(aim.x, aim.z), 0.3); // lean out + face aim
+        if (legs) {
+          legs.lLeg.visible = false;
+          legs.rLeg.visible = false;
+        }
+        animateWalk(this.playerMesh, 0, frameDt); // settle arms to neutral
         this.playerMesh.visible = true;
-        animateWalk(this.playerMesh, 0, frameDt); // settle limbs to neutral
       } else {
         this.playerMesh.visible = false;
+        if (legs) {
+          legs.lLeg.visible = true;
+          legs.rLeg.visible = true;
+        }
       }
     } else {
       this.footPred.smooth(frameDt);
       camX = this.footPred.renderXAt(alpha);
       camZ = this.footPred.renderZAt(alpha);
-      this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
+      this.playerMesh.rotation.set(0, this.footPred.renderRotAt(alpha), 0); // clear any drive-by lean
+      const legs = this.playerMesh.userData.walk as { lLeg: THREE.Object3D; rLeg: THREE.Object3D } | undefined;
+      if (legs) {
+        legs.lLeg.visible = true;
+        legs.rLeg.visible = true;
+      }
       this.playerMesh.visible = !dead;
       const swimming = !!(this.world.water && overWater(camX, camZ, this.world.water));
       if (swimming) {
