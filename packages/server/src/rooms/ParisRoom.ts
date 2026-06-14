@@ -158,6 +158,8 @@ export class ParisRoom extends Room<GameState> {
   private copCounter = 0;
   private tankCounter = 0;
   private dispatchCounter = 0;
+  private trafficCounter = 0;
+  private carDispatch = new Map<string, number>(); // playerId -> next tick we may pop a car
   // playerId -> wanted level (1..5) + tick the heat expires.
   private stars = new Map<string, { n: number; until: number }>();
 
@@ -787,6 +789,7 @@ export class ParisRoom extends Room<GameState> {
     this.resolveRunOver(tickNo);
     this.updatePickups(tickNo);
     this.decayStars(tickNo);
+    this.ensureNearbyCars(tickNo);
     this.updateInterest();
     this.state.serverTick++;
   }
@@ -1072,6 +1075,93 @@ export class ParisRoom extends Room<GameState> {
       this.explodeAt(ps.x, ps.z, n.id);
       this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx: ps.x, tz: ps.z, hit: true, weaponId: SHELL.weaponId });
     }
+  }
+
+  /**
+   * Guarantee a jackable car nearby: if an on-foot player has no car within
+   * NEAR_CAR for a while, roll a fresh traffic car onto the closest street.
+   */
+  private ensureNearbyCars(tickNo: number) {
+    const NEAR_CAR = 80;
+    const MAX_TRAFFIC = 30; // cap so dispatched cars don't pile up forever
+    if (this.countNpc(NPC_CAR) >= MAX_TRAFFIC) return;
+
+    for (const [pid, ps] of this.state.players) {
+      if (!ps.alive || ps.vehicleId) continue; // only stranded pedestrians
+      if (tickNo < (this.carDispatch.get(pid) ?? 0)) continue;
+
+      // Nearest existing car (player vehicle or NPC car/police/tank).
+      let nearest = Infinity;
+      for (const [, v] of this.state.vehicles) nearest = Math.min(nearest, Math.hypot(v.x - ps.x, v.z - ps.z));
+      for (const n of this.npcSims) {
+        if (n.dead || (n.kind !== NPC_CAR && n.kind !== NPC_POLICE && n.kind !== NPC_TANK)) continue;
+        nearest = Math.min(nearest, Math.hypot(n.x - ps.x, n.z - ps.z));
+      }
+      if (nearest <= NEAR_CAR) continue; // a car is already close enough
+
+      const spot = this.nearestRoadSpot(ps.x, ps.z, 14, 140);
+      if (!spot) {
+        this.carDispatch.set(pid, tickNo + 1 * TICK_RATE); // retry soon
+        continue;
+      }
+      this.spawnTrafficCar(spot.road, spot.seg, spot.x, spot.z);
+      this.carDispatch.set(pid, tickNo + 5 * TICK_RATE); // throttle
+    }
+  }
+
+  /** Closest point on a drivable (non-Périph, non-water) road within [min,max] m. */
+  private nearestRoadSpot(
+    x: number,
+    z: number,
+    min: number,
+    max: number,
+  ): { road: { points: { x: number; z: number }[] }; seg: number; x: number; z: number } | null {
+    let best: { road: { points: { x: number; z: number }[] }; seg: number; x: number; z: number; d: number } | null =
+      null;
+    for (const r of this.city.roads) {
+      if (r.width >= 22) continue; // not the Périphérique
+      for (let i = 0; i < r.points.length - 1; i++) {
+        const a = r.points[i];
+        const b = r.points[i + 1];
+        const abx = b.x - a.x;
+        const abz = b.z - a.z;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+        const px = a.x + abx * t;
+        const pz = a.z + abz * t;
+        const d = Math.hypot(x - px, z - pz);
+        if (d < min || d > max) continue;
+        if (overWater(px, pz, this.water)) continue; // don't drop a car in the Seine
+        if (!best || d < best.d) best = { road: r, seg: i, x: px, z: pz, d };
+      }
+    }
+    return best;
+  }
+
+  private spawnTrafficCar(road: { points: { x: number; z: number }[] }, seg: number, x: number, z: number) {
+    const n: NpcSimState = {
+      id: `traffic${this.trafficCounter++}`,
+      kind: NPC_CAR,
+      x,
+      z,
+      rotY: 0,
+      colorId: Math.floor(Math.random() * 5),
+      hp: 70,
+      dead: false,
+      respawnAt: 0,
+      tx: 0,
+      tz: 0,
+      repathAt: 0,
+      path: road.points.map((p) => ({ x: p.x, z: p.z })),
+      seg,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      speed: 8,
+      targetId: '',
+      fireCd: 0,
+      deployed: false,
+    };
+    this.npcSims.push(n);
+    this.npcById.set(n.id, n);
+    this.addNpcState(n);
   }
 
   /** Server-side car-vs-car separation (player vehicles + NPC traffic). */
