@@ -285,24 +285,6 @@ function buildBridges(): Bridge[] {
     }
     return false;
   };
-  // Local Seine tangent (flow direction) at the nearest river segment.
-  const tangentAt = (x: number, z: number) => {
-    let bd = Infinity;
-    let tx = 1;
-    let tz = 0;
-    for (let i = 0; i < SEINE_POINTS.length - 1; i++) {
-      const a = SEINE_POINTS[i];
-      const b = SEINE_POINTS[i + 1];
-      const d = distToSeg(x, z, a, b);
-      if (d < bd) {
-        bd = d;
-        const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-        tx = (b.x - a.x) / l;
-        tz = (b.z - a.z) / l;
-      }
-    }
-    return { tx, tz };
-  };
   const cands: Bridge[] = [];
   const wetPts: Vec2[] = [];
   for (const r of ROADS) {
@@ -312,29 +294,20 @@ function buildBridges(): Bridge[] {
     if (len < 1) continue;
     const ux = dx / len;
     const uz = dz / len;
+    const rotationY = Math.atan2(-dz, dx); // deck follows the road
+    const width = r.width + 4; // slim ribbon, barely wider than the road
     const steps = Math.max(2, Math.ceil(len / 3));
     let spanStart = -1;
-    // Deck spans straight across the river (transverse): long axis = river normal.
-    // Decks are barely wider than the road; a diagonal crossing is tiled with a
-    // few of them along the span (greedy dedup later trims redundant ones).
-    const width = r.width + 4;
+    // One slim deck per contiguous wet span, carrying the road straight across.
     const deck = (d0: number, d1: number) => {
-      const step = Math.max(8, r.width); // overlaps (width = r.width+4) so no gaps
-      for (let dd = d0; dd < d1 + step; dd += step) {
-        const m = Math.min(dd, d1);
-        const cx = r.from.x + ux * m;
-        const cz = r.from.z + uz * m;
-        const { tx, tz } = tangentAt(cx, cz);
-        const nx = -tz; // river normal
-        const nz = tx;
-        cands.push({
-          x: cx,
-          z: cz,
-          rotationY: Math.atan2(-nz, nx), // deck long (X) axis along the river normal
-          length: SEINE_WIDTH + 26, // span the water + onto both banks
-          width,
-        });
-      }
+      const mid = (d0 + d1) / 2;
+      cands.push({
+        x: r.from.x + ux * mid,
+        z: r.from.z + uz * mid,
+        rotationY,
+        length: d1 - d0 + 16, // ~8m onto each bank
+        width,
+      });
     };
     for (let i = 0; i <= steps; i++) {
       const d = (len * i) / steps;
