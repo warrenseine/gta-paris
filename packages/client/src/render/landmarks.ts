@@ -96,13 +96,35 @@ function arcdetriomphe(): THREE.Group {
 
 function louvre(): THREE.Group {
   const g = new THREE.Group();
+  const ROOF = 0x444b57; // dark slate mansard
   // U-shaped palace opening WEST toward the Tuileries; closed wing on the east.
-  g.add(box(16, 18, 58, STONE, 22, 9, 0)); // east wing (back of the U)
-  g.add(box(46, 18, 16, STONE, 0, 9, -21)); // north wing
-  g.add(box(46, 18, 16, STONE, 0, 9, 21)); // south wing
+  // Each wing is a stone block capped by a mansard roof slab.
+  const wing = (w: number, h: number, d: number, x: number, z: number) => {
+    g.add(box(w, h, d, STONE, x, h / 2, z));
+    g.add(box(w + 1, 3, d + 1, ROOF, x, h + 1.5, z));
+  };
+  wing(16, 16, 58, 22, 0); // east wing (back of the U)
+  wing(52, 15, 15, -3, -22); // north wing
+  wing(52, 15, 15, -3, 22); // south wing
+
+  // Pavilions: taller corner/central blocks with pointed pavilion roofs (the
+  // château silhouette).
+  const pav = (x: number, z: number) => {
+    g.add(box(15, 22, 15, STONE, x, 11, z));
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(11, 9, 4), flat(ROOF));
+    cap.rotation.y = Math.PI / 4;
+    cap.position.set(x, 26, z);
+    g.add(cap);
+  };
+  pav(28, -22); // four corner pavilions
+  pav(28, 22);
+  pav(-28, -22);
+  pav(-28, 22);
+  pav(28, 0); // central pavilion on the back wing
+
   const pyr = new THREE.Mesh(new THREE.ConeGeometry(7, 11, 4), flat(0x9fd0e0));
   pyr.rotation.y = Math.PI / 4;
-  pyr.position.set(-6, 5.5, 0); // glass pyramid in the courtyard, toward the opening
+  pyr.position.set(-8, 5.5, 0); // glass pyramid in the courtyard, toward the opening
   g.add(pyr);
   return g;
 }

@@ -31,7 +31,8 @@ const N = {
   opera: { x: -45, z: -120 },
   monceau: { x: -250, z: -245 },
   louvre: { x: 55, z: 5 },
-  palais: { x: 25, z: -40 },
+  rivoliW: { x: -95, z: -20 }, // straight rue de Rivoli along the Tuileries' north edge
+  rivoliE: { x: 40, z: -20 },
   chatelet: { x: 120, z: 35 },
   hoteldeville: { x: 160, z: 45 },
   notredame: { x: 150, z: 72 }, // on the île de la Cité (river centerline)
@@ -102,7 +103,9 @@ const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
   ['etoile', 'grandpalais', 13],
   ['etoile', 'monceau', 13],
   ['etoile', 'invalides', 13],
-  ['concorde', 'louvre', 16], // Rivoli axis
+  ['concorde', 'rivoliW', 14], // rue de Rivoli: straight axis along the Tuileries
+  ['rivoliW', 'rivoliE', 16],
+  ['rivoliE', 'louvre', 14],
   ['louvre', 'chatelet', 16],
   ['chatelet', 'hoteldeville', 14],
   ['hoteldeville', 'bastille', 16],
@@ -217,7 +220,7 @@ const SEINE_POINTS: Vec2[] = [
 const SEINE_WIDTH = 46;
 
 const PARKS: ParkDef[] = [
-  { name: 'Jardin des Tuileries', cx: -30, cz: 16, hw: 62, hd: 13 }, // south of rue de Rivoli
+  { name: 'Jardin des Tuileries', cx: -28, cz: 2, hw: 62, hd: 16 }, // just south of the straight rue de Rivoli (z=-20)
   { name: 'Champ de Mars', cx: -300, cz: 165, hw: 28, hd: 70 },
   { name: 'Jardin du Luxembourg', cx: 55, cz: 185, hw: 48, hd: 40 },
   { name: 'Parc Monceau', cx: -250, cz: -245, hw: 45, hd: 38 },
