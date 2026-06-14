@@ -124,6 +124,11 @@ const AVENUES: [keyof typeof N, keyof typeof N, number][] = [
   ['garedelyon', 'nation', 13],
   ['pantheon', 'montparnasse', 12], // close the Left-Bank loop
   ['monceau', 'madeleine', 12],
+  // Southern boulevard: a through-route across the dense south, SW -> SE
+  // (all south of the Seine, so it adds no river crossings).
+  ['parcdesprinces', 'montparnasse', 14],
+  ['montparnasse', 'garedelyon', 14],
+  ['garedelyon', 'bnf', 13],
 ];
 
 // Build the full network: avenues + dead-end killers + radial links to the
