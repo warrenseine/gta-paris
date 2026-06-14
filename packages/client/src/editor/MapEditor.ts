@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { computeBridges, type CityData } from '@gta/shared';
 import { CityRenderer } from '../render/CityRenderer.js';
 
-type Kind = 'building' | 'landmark' | 'tree' | 'road' | 'river';
+type Kind = 'building' | 'landmark' | 'tree' | 'road' | 'river' | 'park' | 'bridge';
 
 interface Selection {
   kind: Kind;
@@ -28,6 +28,7 @@ export class MapEditor {
   private panLast = { x: 0, y: 0 };
   private camCenter = new THREE.Vector3(0, 0, 0);
   private viewSize = 700;
+  private autoBridges = true; // recompute bridges from roads until you edit one
   private bar: HTMLDivElement;
   private dom: HTMLCanvasElement;
 
@@ -84,9 +85,13 @@ export class MapEditor {
       const c = this.group.children[i];
       if (c !== this.marker) this.group.remove(c);
     }
-    this.city.bridges = computeBridges(this.city.roads, this.city.river);
     this.group.add(new CityRenderer(this.city).group);
     this.placeMarker();
+  }
+
+  /** Regenerate bridges from the current roads/river (unless edited by hand). */
+  private recomputeBridges() {
+    if (this.autoBridges) this.city.bridges = computeBridges(this.city.roads, this.city.river);
   }
 
   private resize() {
@@ -99,6 +104,12 @@ export class MapEditor {
     this.cam.position.set(this.camCenter.x, 1500, this.camCenter.z + 0.01);
     this.cam.lookAt(this.camCenter.x, 0, this.camCenter.z);
     this.cam.updateProjectionMatrix();
+  }
+
+  private pan(dx: number, dz: number) {
+    this.camCenter.x += dx;
+    this.camCenter.z += dz;
+    this.resize();
   }
 
   render() {
@@ -174,12 +185,20 @@ export class MapEditor {
       return;
     }
     if (!this.active) return;
+    // Arrow keys pan the view.
+    const panStep = this.viewSize * 0.12;
+    if (e.code === 'ArrowLeft') return this.pan(-panStep, 0);
+    if (e.code === 'ArrowRight') return this.pan(panStep, 0);
+    if (e.code === 'ArrowUp') return this.pan(0, -panStep);
+    if (e.code === 'ArrowDown') return this.pan(0, panStep);
     const k = e.key.toLowerCase();
     if (k === '1') this.setKind('building');
     else if (k === '2') this.setKind('landmark');
     else if (k === '3') this.setKind('tree');
     else if (k === '4') this.setKind('road');
     else if (k === '5') this.setKind('river');
+    else if (k === '6') this.setKind('park');
+    else if (k === '7') this.setKind('bridge');
     else if (k === 'a') this.setMode(this.mode === 'add' ? 'select' : 'add');
     else if (k === 'd') this.setMode(this.mode === 'delete' ? 'select' : 'delete');
     else if (k === 'q' || k === '[') this.rotateSel(-Math.PI / 12);
@@ -222,6 +241,8 @@ export class MapEditor {
     if (this.kind === 'building') ref = near(this.city.buildings, (b) => b.cx, (b) => b.cz, 30);
     else if (this.kind === 'landmark') ref = near(this.city.landmarks, (l) => l.position.x, (l) => l.position.z, 60);
     else if (this.kind === 'tree') ref = near(this.city.trees, (t) => t.x, (t) => t.z, 8);
+    else if (this.kind === 'park') ref = near(this.city.parks, (p) => p.cx, (p) => p.cz, 90);
+    else if (this.kind === 'bridge') ref = near(this.city.bridges, (b) => b.x, (b) => b.z, 40);
     else if (this.kind === 'road') ref = this.nearestPoint(this.city.roads.flatMap((r) => r.points), x, z, 40);
     else if (this.kind === 'river') ref = this.nearestPoint(this.city.river.points, x, z, 60);
     this.sel = ref ? { kind: this.kind, ref } : null;
@@ -246,30 +267,36 @@ export class MapEditor {
     const r = this.sel.ref;
     if (this.sel.kind === 'building') return { x: r.cx, z: r.cz };
     if (this.sel.kind === 'landmark') return { x: r.position.x, z: r.position.z };
+    if (this.sel.kind === 'park') return { x: r.cx, z: r.cz };
     return { x: r.x, z: r.z };
   }
 
   private moveSel(x: number, z: number) {
     if (!this.sel) return;
     const r = this.sel.ref;
-    if (this.sel.kind === 'building') {
+    const k = this.sel.kind;
+    if (k === 'building' || k === 'park') {
       r.cx = x;
       r.cz = z;
-    } else if (this.sel.kind === 'landmark') {
+    } else if (k === 'landmark') {
       r.position.x = x;
       r.position.z = z;
     } else {
       r.x = x;
       r.z = z;
     }
+    if (k === 'bridge') this.autoBridges = false;
+    if (k === 'road' || k === 'river') this.recomputeBridges();
     this.placeMarker();
   }
 
   private rotateSel(da: number) {
     if (!this.sel) return;
     const r = this.sel.ref;
-    if (this.sel.kind === 'building' || this.sel.kind === 'landmark') {
+    const k = this.sel.kind;
+    if (k === 'building' || k === 'landmark' || k === 'park' || k === 'bridge') {
       r.rotationY = (r.rotationY ?? 0) + da;
+      if (k === 'bridge') this.autoBridges = false;
       this.rebuild();
     }
   }
@@ -277,15 +304,22 @@ export class MapEditor {
   private scaleSel(f: number) {
     if (!this.sel) return;
     const r = this.sel.ref;
-    if (this.sel.kind === 'building') {
+    const k = this.sel.kind;
+    if (k === 'building') {
       r.hw *= f;
       r.hd *= f;
       r.height *= f;
-      this.rebuild();
-    } else if (this.sel.kind === 'landmark') {
+    } else if (k === 'landmark') {
       r.scale = (r.scale ?? 1) * f;
-      this.rebuild();
-    }
+    } else if (k === 'park') {
+      r.hw *= f;
+      r.hd *= f;
+    } else if (k === 'bridge') {
+      r.length *= f;
+      r.width *= f;
+      this.autoBridges = false;
+    } else return;
+    this.rebuild();
   }
 
   private addAt(x: number, z: number) {
@@ -294,6 +328,11 @@ export class MapEditor {
       this.city.buildings.push({ id, cx: x, cz: z, hw: 9, hd: 9, height: 24, rotationY: 0, paletteId: 0 });
     } else if (this.kind === 'tree') {
       this.city.trees.push({ x, z });
+    } else if (this.kind === 'park') {
+      this.city.parks.push({ name: 'Park', cx: x, cz: z, hw: 28, hd: 28 });
+    } else if (this.kind === 'bridge') {
+      this.city.bridges.push({ x, z, rotationY: 0, length: 60, width: 18 });
+      this.autoBridges = false;
     } else return;
     this.rebuild();
   }
@@ -301,9 +340,14 @@ export class MapEditor {
   private deleteSel() {
     if (!this.sel) return;
     const r = this.sel.ref;
-    if (this.sel.kind === 'building') this.city.buildings = this.city.buildings.filter((b) => b !== r);
-    else if (this.sel.kind === 'tree') this.city.trees = this.city.trees.filter((t) => t !== r);
-    else return; // landmarks/road/river points aren't deletable in v1
+    const k = this.sel.kind;
+    if (k === 'building') this.city.buildings = this.city.buildings.filter((b) => b !== r);
+    else if (k === 'tree') this.city.trees = this.city.trees.filter((t) => t !== r);
+    else if (k === 'park') this.city.parks = this.city.parks.filter((p) => p !== r);
+    else if (k === 'bridge') {
+      this.city.bridges = this.city.bridges.filter((b) => b !== r);
+      this.autoBridges = false;
+    } else return; // landmarks / road & river points aren't deletable
     this.sel = null;
     this.marker.visible = false;
     this.rebuild();
@@ -320,7 +364,7 @@ export class MapEditor {
   }
 
   private exportMap() {
-    this.city.bridges = computeBridges(this.city.roads, this.city.river);
+    this.recomputeBridges();
     const blob = new Blob([JSON.stringify({ enabled: true, city: this.city })], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -335,12 +379,12 @@ export class MapEditor {
     this.bar.innerHTML =
       "<b>MAP EDITOR</b><span style='opacity:.7'>(` exit)</span>" +
       `<span>type:</span>` +
-      ['building', 'landmark', 'tree', 'road', 'river'].map((k, i) => btn(`${i + 1} ${k}`, this.kind === k)).join('') +
+      ['building', 'landmark', 'tree', 'road', 'river', 'park', 'bridge'].map((k, i) => btn(`${i + 1} ${k}`, this.kind === k)).join('') +
       `<span style="margin-left:10px">mode:</span>` +
       btn('select', this.mode === 'select') +
       btn('A add', this.mode === 'add') +
       btn('D delete', this.mode === 'delete') +
-      `<span style="margin-left:10px;opacity:.8">drag=move · Q/E rotate · -/= scale · X delete · right-drag pan · wheel zoom</span>` +
+      `<span style="margin-left:10px;opacity:.8">drag=move · Q/E rotate · -/= scale · X delete · right-drag/arrows pan · wheel zoom</span>` +
       `<span id="ed-export" style="margin-left:auto;padding:4px 12px;border-radius:5px;background:#39d98a;color:#000;cursor:pointer;pointer-events:auto">Export (⌘S)</span>`;
     const exp = this.bar.querySelector('#ed-export') as HTMLElement;
     exp.onclick = () => this.exportMap();
