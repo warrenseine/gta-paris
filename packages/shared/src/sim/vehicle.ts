@@ -13,6 +13,8 @@ export interface CarState {
   z: number;
   rotY: number; // heading
   speed: number; // signed forward speed (m/s)
+  /** Speed at which the car struck a building this step (0 = no wall hit). Transient. */
+  wallImpact?: number;
 }
 
 export const CAR = {
@@ -74,8 +76,10 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
   let x = s.x + Math.sin(rotY) * speed * dt;
   let z = s.z + Math.cos(rotY) * speed * dt;
 
+  let wallImpact = 0;
   const resolved = resolveAgainstBuildings({ x, z, r: CAR.radius }, world.buildings);
   if (resolved.x !== x || resolved.z !== z) {
+    wallImpact = speed; // incoming speed into the wall (drives crash damage)
     speed *= 0.7; // glance off walls instead of slamming to a stop
     x = resolved.x;
     z = resolved.z;
@@ -92,5 +96,5 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
   x = bounded.x;
   z = bounded.z;
 
-  return { x, z, rotY, speed };
+  return { x, z, rotY, speed, wallImpact };
 }

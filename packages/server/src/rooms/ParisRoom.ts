@@ -377,8 +377,11 @@ export class ParisRoom extends Room<GameState> {
 
   /** Take an NPC vehicle (traffic / police / tank): eject its driver, convert it. */
   private carjackNpcCar(npc: NpcSimState, id: string, ps: PlayerState) {
-    // Ejected driver beside the vehicle.
-    this.spawnEjectedPed(npc.x + Math.cos(npc.rotY) * 3, npc.z - Math.sin(npc.rotY) * 3);
+    // Ejected driver beside the vehicle — a cop if it's a police car, else a civilian.
+    const ex = npc.x + Math.cos(npc.rotY) * 3;
+    const ez = npc.z - Math.sin(npc.rotY) * 3;
+    if (npc.kind === NPC_POLICE) this.deployCop(ex, ez, id); // a real officer who gives chase
+    else this.spawnEjectedPed(ex, ez);
     // New player vehicle at the car's pose, keeping its breed (police / tank).
     const kind = npc.kind === NPC_TANK ? 2 : npc.kind === NPC_POLICE ? 1 : 0;
     const vid = `vj${this.vjCounter++}`;
@@ -685,15 +688,13 @@ export class ParisRoom extends Room<GameState> {
           if (car) {
             const veh = this.state.vehicles.get(ps.vehicleId);
             const carWorld = veh?.kind === 2 ? { ...world, maxSpeed: TANK_MAX_SPEED } : world;
-            const before = Math.abs(car.speed);
             const next = stepCar(car, input, DT, carWorld);
             this.cars.set(ps.vehicleId, next);
-            // Crash damage proportional to the speed scrubbed off in a wall hit,
-            // accumulating over hits until the car explodes. Skip deliberate
-            // braking (handbrake) so only impacts count.
-            const drop = before - Math.abs(next.speed);
-            if (!input.handbrake && before > 7 && drop > before * 0.3) {
-              this.damageCar(ps.vehicleId, (drop - 2) * 2.4, id);
+            // Crash damage only on an actual building impact, proportional to the
+            // speed driven into the wall, accumulating until the car explodes.
+            // (No false hits from turning, water, or being nudged while parked.)
+            if (next.wallImpact && next.wallImpact > 9) {
+              this.damageCar(ps.vehicleId, (next.wallImpact - 8) * 2.0, id);
             }
             sim.foot.x = next.x;
             sim.foot.z = next.z;
