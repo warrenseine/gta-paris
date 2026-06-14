@@ -1,0 +1,10 @@
+# Render Blueprint. In the Render dashboard: New > Blueprint, point at this repo.
+# Builds the Dockerfile, serves client + WebSocket on one service, auto TLS.
+services:
+  - type: web
+    name: gta-paris
+    runtime: docker
+    plan: free # sleeps after 15 min idle; client retries through cold start
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true

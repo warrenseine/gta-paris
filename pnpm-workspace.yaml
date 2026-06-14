@@ -1,0 +1,14 @@
+packages:
+  - 'packages/*'
+
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  msgpackr-extract: true
+
+blockExoticSubdeps: false
+neverBuiltDependencies: []
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - '@swc/core'
