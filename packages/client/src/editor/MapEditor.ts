@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 import { computeBridges, type CityData } from '@gta/shared';
 import { CityRenderer } from '../render/CityRenderer.js';
+import { makePickupMesh } from '../entities/views.js';
 
-type Kind = 'building' | 'landmark' | 'tree' | 'road' | 'river' | 'park' | 'bridge';
+type Kind = 'building' | 'landmark' | 'tree' | 'road' | 'river' | 'park' | 'bridge' | 'pickup';
+
+// Bonuses placeable in the editor (kind 0 = weapon w/ weaponId, 1 = health).
+const PICKUP_OPTIONS: { label: string; kind: number; weaponId: number }[] = [
+  { label: 'health', kind: 1, weaponId: 0 },
+  { label: 'pistol', kind: 0, weaponId: 1 },
+  { label: 'SMG', kind: 0, weaponId: 2 },
+  { label: 'shotgun', kind: 0, weaponId: 3 },
+];
 
 interface Selection {
   kind: Kind;
@@ -31,6 +40,7 @@ export class MapEditor {
   private autoBridges = true; // recompute bridges from roads until you edit one
   private pendingRoad: { x: number; z: number } | null = null; // first click of a new road
   private fileHandle: FileSystemFileHandle | null = null; // remembered save target
+  private pickupType = 0; // index into PICKUP_OPTIONS for placing bonuses
   private bar: HTMLDivElement;
   private dom: HTMLCanvasElement;
 
@@ -88,6 +98,12 @@ export class MapEditor {
       if (c !== this.marker) this.group.remove(c);
     }
     this.group.add(new CityRenderer(this.city).group);
+    // Pickups are dynamic in-game, so draw editor markers for them here.
+    for (const p of this.city.pickups) {
+      const m = makePickupMesh(p.kind, p.weaponId);
+      m.position.set(p.x, 0.8, p.z);
+      this.group.add(m);
+    }
     this.placeMarker();
   }
 
@@ -201,6 +217,8 @@ export class MapEditor {
     else if (k === '5') this.setKind('river');
     else if (k === '6') this.setKind('park');
     else if (k === '7') this.setKind('bridge');
+    else if (k === '8') this.setKind('pickup');
+    else if (k === 't') this.cyclePickup();
     else if (k === 'a') this.setMode(this.mode === 'add' ? 'select' : 'add');
     else if (k === 'd') this.setMode(this.mode === 'delete' ? 'select' : 'delete');
     else if (k === 'q' || k === '[') this.rotateSel(-Math.PI / 12);
@@ -232,6 +250,17 @@ export class MapEditor {
     this.pendingRoad = null;
   }
 
+  /** Cycle the bonus type used for placing — and retype the selected one. */
+  private cyclePickup() {
+    this.pickupType = (this.pickupType + 1) % PICKUP_OPTIONS.length;
+    if (this.sel?.kind === 'pickup') {
+      const o = PICKUP_OPTIONS[this.pickupType];
+      this.sel.ref.kind = o.kind;
+      this.sel.ref.weaponId = o.weaponId;
+      this.rebuild();
+    }
+  }
+
   private pick(x: number, z: number) {
     const near = <T>(arr: T[], gx: (t: T) => number, gz: (t: T) => number, max: number) => {
       let best: T | null = null;
@@ -251,6 +280,7 @@ export class MapEditor {
     else if (this.kind === 'tree') ref = near(this.city.trees, (t) => t.x, (t) => t.z, 8);
     else if (this.kind === 'park') ref = near(this.city.parks, (p) => p.cx, (p) => p.cz, 90);
     else if (this.kind === 'bridge') ref = near(this.city.bridges, (b) => b.x, (b) => b.z, 40);
+    else if (this.kind === 'pickup') ref = near(this.city.pickups, (p) => p.x, (p) => p.z, 8);
     else if (this.kind === 'road') ref = this.nearestPoint(this.city.roads.flatMap((r) => r.points), x, z, 40);
     else if (this.kind === 'river') ref = this.nearestPoint(this.city.river.points, x, z, 60);
     this.sel = ref ? { kind: this.kind, ref } : null;
@@ -352,6 +382,9 @@ export class MapEditor {
     } else if (this.kind === 'bridge') {
       this.city.bridges.push({ x, z, rotationY: 0, length: 60, width: 18 });
       this.autoBridges = false;
+    } else if (this.kind === 'pickup') {
+      const o = PICKUP_OPTIONS[this.pickupType];
+      this.city.pickups.push({ x, z, kind: o.kind, weaponId: o.weaponId });
     } else if (this.kind === 'road') {
       // First click sets the start; second click lays the segment.
       if (!this.pendingRoad) {
@@ -378,6 +411,7 @@ export class MapEditor {
     if (k === 'building') this.city.buildings = this.city.buildings.filter((b) => b !== r);
     else if (k === 'tree') this.city.trees = this.city.trees.filter((t) => t !== r);
     else if (k === 'park') this.city.parks = this.city.parks.filter((p) => p !== r);
+    else if (k === 'pickup') this.city.pickups = this.city.pickups.filter((p) => p !== r);
     else if (k === 'bridge') {
       this.city.bridges = this.city.bridges.filter((b) => b !== r);
       this.autoBridges = false;
@@ -433,7 +467,8 @@ export class MapEditor {
     this.bar.innerHTML =
       "<b>MAP EDITOR</b><span style='opacity:.7'>(` exit)</span>" +
       `<span>type:</span>` +
-      ['building', 'landmark', 'tree', 'road', 'river', 'park', 'bridge'].map((k, i) => btn(`${i + 1} ${k}`, this.kind === k)).join('') +
+      ['building', 'landmark', 'tree', 'road', 'river', 'park', 'bridge', 'pickup'].map((k, i) => btn(`${i + 1} ${k}`, this.kind === k)).join('') +
+      (this.kind === 'pickup' ? `<span style="opacity:.85">bonus: <b>${PICKUP_OPTIONS[this.pickupType].label}</b> (T)</span>` : '') +
       `<span style="margin-left:10px">mode:</span>` +
       btn('select', this.mode === 'select') +
       btn('A add', this.mode === 'add') +
