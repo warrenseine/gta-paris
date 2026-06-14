@@ -33,13 +33,15 @@ export interface NpcSimState {
   targetId: string;
   fireCd: number;
   deployed: boolean;
+  /** Corpse is removed (not revived) when its timer elapses — cops, dispatched units. */
+  noRevive?: boolean;
 }
 
 export const PED_HP = 20;
 export const CAR_HP = 70;
 
 const PED_COUNT = 150;
-const TRAFFIC_COUNT = 26;
+const TRAFFIC_COUNT = 18; // fewer cars → less gridlock at intersections
 const POLICE_COUNT = 4;
 const PED_SPEED = 1.6;
 const PED_RADIUS = 0.4;
@@ -258,6 +260,9 @@ function stepPed(n: NpcSimState, dt: number, city: CityData, tick: number) {
 
 function stepCarNpc(n: NpcSimState, dt: number) {
   if (n.path.length < 2) return;
+  // Resume cruising speed after yielding at a jam (collision damping slows us).
+  const cruise = 14;
+  if (n.speed < cruise) n.speed = Math.min(cruise, n.speed + 10 * dt);
   let target = n.path[n.seg + n.dir];
   if (!target) {
     // Reached an end -> reverse.

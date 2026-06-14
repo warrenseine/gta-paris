@@ -128,18 +128,38 @@ export class CityRenderer {
   }
 
   private buildRoads(city: CityData) {
+    const lineMat = flat(0xe6e6e0);
     for (const r of city.roads) {
+      const isPeriph = r.width >= 22; // the Périphérique is the widest road (4 lanes)
       for (let i = 0; i < r.points.length - 1; i++) {
         const a = r.points[i];
         const b = r.points[i + 1];
         const dx = b.x - a.x;
         const dz = b.z - a.z;
         const len = Math.hypot(dx, dz);
+        const rotZ = -Math.atan2(dz, dx) + Math.PI / 2;
+        const cx = (a.x + b.x) / 2;
+        const cz = (a.z + b.z) / 2;
+
         const m = new THREE.Mesh(new THREE.PlaneGeometry(r.width, len), flat(COLORS.road));
         m.rotation.x = -Math.PI / 2;
-        m.rotation.z = -Math.atan2(dz, dx) + Math.PI / 2;
-        m.position.set((a.x + b.x) / 2, 0.08, (a.z + b.z) / 2); // clearly above parks/ground
+        m.rotation.z = rotZ;
+        m.position.set(cx, 0.08, cz); // clearly above parks/ground
         this.group.add(m);
+
+        // White lane markings: a centre line for normal 2-lane streets; the
+        // Périphérique gets lane dividers too (4 lanes). Skip tiny stubs.
+        if (len < 8) continue;
+        const ux = dx / len;
+        const uz = dz / len;
+        const offsets = isPeriph ? [-r.width / 4, 0, r.width / 4] : [0];
+        for (const off of offsets) {
+          const line = new THREE.Mesh(new THREE.PlaneGeometry(0.35, len - 4), lineMat);
+          line.rotation.x = -Math.PI / 2;
+          line.rotation.z = rotZ;
+          line.position.set(cx + -uz * off, 0.085, cz + ux * off);
+          this.group.add(line);
+        }
       }
     }
   }

@@ -47,6 +47,7 @@ const N = {
   sacrecoeur: { x: 45, z: -310 },
   buttes: { x: 320, z: -240 },
   perelachaise: { x: 390, z: -30 },
+  parcdesprinces: { x: -430, z: 250 }, // SW stadium, near the Bois de Boulogne
 };
 
 interface Seg {
@@ -224,6 +225,7 @@ const PARKS: ParkDef[] = [
   { name: 'Père-Lachaise', cx: 395, cz: -35, hw: 48, hd: 60 },
   { name: 'Bois de Boulogne', cx: -560, cz: -10, hw: 70, hd: 150 },
   { name: 'Bois de Vincennes', cx: 560, cz: 90, hw: 70, hd: 140 },
+  { name: 'Parc des Princes', cx: -430, cz: 250, hw: 32, hd: 26 },
 ];
 
 function distToSeg(x: number, z: number, a: Vec2, b: Vec2): number {
@@ -297,6 +299,7 @@ const LANDMARKS: { key: LandmarkKey; at: Vec2; y?: number; off?: Vec2; rotationY
   { key: 'madeleine', at: N.madeleine, off: { x: 0, z: -26 } },
   { key: 'grandpalais', at: N.grandpalais, off: { x: -8, z: -26 } },
   { key: 'montparnasse', at: N.montparnasse },
+  { key: 'parcdesprinces', at: N.parcdesprinces },
 ];
 
 function nearLandmark(x: number, z: number, margin: number): boolean {
@@ -373,7 +376,11 @@ function buildTrees(): Vec2[] {
     }
   }
   return pts.filter(
-    (p) => pointInPoly(p.x, p.z, OUTLINE) && distToBoundary(p.x, p.z) > 5 && !nearSeine(p.x, p.z, 2),
+    (p) =>
+      pointInPoly(p.x, p.z, OUTLINE) &&
+      distToBoundary(p.x, p.z) > 5 &&
+      !nearSeine(p.x, p.z, 2) &&
+      !onRoad(p.x, p.z, 1), // never on the roadway itself
   );
 }
 

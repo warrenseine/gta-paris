@@ -43,6 +43,9 @@ export const CAMERA = {
   followLerp: 5, // lower = smoother / floatier camera
 };
 
+/** Tank top speed — deliberately well below a car's ~40 m/s. */
+export const TANK_MAX_SPEED = 14;
+
 /** Interest management. */
 export const INTEREST_RADIUS = 150; // meters
 export const GRID_CELL = 50; // meters

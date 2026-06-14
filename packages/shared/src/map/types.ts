@@ -13,6 +13,7 @@ export type LandmarkKey =
   | 'madeleine'
   | 'montparnasse'
   | 'grandpalais'
+  | 'parcdesprinces'
   | 'arcdetriomphe';
 
 /** A green space (park). Axis-aligned rectangle for simplicity. */

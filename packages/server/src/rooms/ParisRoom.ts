@@ -17,6 +17,7 @@ import {
   CAR,
   INTEREST_RADIUS,
   MAX_REWIND_MS,
+  TANK_MAX_SPEED,
   type CityData,
   type WaterField,
   type FootState,
@@ -140,7 +141,6 @@ const POLICE_SIGHT = 130; // police notice gunfire within this range
 const COP_FIRE_RANGE = 45;
 const COP_DAMAGE = 10;
 const CAR_MAX_HP = 100;
-const CRASH_SPEED = 18; // only hard, fast impacts damage the car
 
 export class ParisRoom extends Room<GameState> {
   maxClients = 100;
@@ -495,8 +495,9 @@ export class ParisRoom extends Room<GameState> {
           npc.respawnAt = this.state.serverTick + 12 * TICK_RATE;
           this.state.npcs.delete(npc.id);
         } else if (npc.kind === NPC_COP) {
-          if (ns) ns.dead = true; // cop body stays, no respawn
-          npc.respawnAt = Number.MAX_SAFE_INTEGER;
+          if (ns) ns.dead = true; // body lingers briefly, then is removed (no respawn)
+          npc.respawnAt = this.state.serverTick + CORPSE_TICKS;
+          npc.noRevive = true;
         } else {
           if (ns) ns.dead = true;
           npc.respawnAt = this.state.serverTick + CORPSE_TICKS;
@@ -639,13 +640,17 @@ export class ParisRoom extends Room<GameState> {
         if (ps.vehicleId) {
           const car = this.cars.get(ps.vehicleId);
           if (car) {
+            const veh = this.state.vehicles.get(ps.vehicleId);
+            const carWorld = veh?.kind === 2 ? { ...world, maxSpeed: TANK_MAX_SPEED } : world;
             const before = Math.abs(car.speed);
-            const next = stepCar(car, input, DT, world);
+            const next = stepCar(car, input, DT, carWorld);
             this.cars.set(ps.vehicleId, next);
-            // Only a hard, fast head-on crash damages the car.
+            // Crash damage proportional to the speed scrubbed off in a wall hit,
+            // accumulating over hits until the car explodes. Skip deliberate
+            // braking (handbrake) so only impacts count.
             const drop = before - Math.abs(next.speed);
-            if (before > CRASH_SPEED && drop > before * 0.45) {
-              this.damageCar(ps.vehicleId, drop * 1.2, id);
+            if (!input.handbrake && before > 7 && drop > before * 0.3) {
+              this.damageCar(ps.vehicleId, (drop - 2) * 2.4, id);
             }
             sim.foot.x = next.x;
             sim.foot.z = next.z;
@@ -703,12 +708,17 @@ export class ParisRoom extends Room<GameState> {
     }
 
     // Ambient NPCs.
+    const purge: string[] = [];
     for (const n of this.npcSims) {
       if (n.dead) {
         if (tickNo >= n.respawnAt) {
           this.state.npcs.delete(n.id); // clear corpse
-          reviveNpc(n, this.city);
-          this.addNpcState(n);
+          if (n.noRevive) {
+            purge.push(n.id); // dispatched units / cops: gone for good (no leak)
+          } else {
+            reviveNpc(n, this.city);
+            this.addNpcState(n);
+          }
         }
         continue;
       }
@@ -722,6 +732,11 @@ export class ParisRoom extends Room<GameState> {
         ns.z = n.z;
         ns.rotY = n.rotY;
       }
+    }
+    if (purge.length) {
+      const gone = new Set(purge);
+      this.npcSims = this.npcSims.filter((n) => !gone.has(n.id));
+      for (const id of purge) this.npcById.delete(id);
     }
 
     this.resolveCarCollisions();
@@ -754,7 +769,8 @@ export class ParisRoom extends Room<GameState> {
         ped.dead = true;
         ped.x += Math.sin(car.rotY) * 5;
         ped.z += Math.cos(car.rotY) * 5;
-        ped.respawnAt = ped.kind === NPC_COP ? Number.MAX_SAFE_INTEGER : tickNo + CORPSE_TICKS;
+        ped.respawnAt = tickNo + CORPSE_TICKS;
+        if (ped.kind === NPC_COP) ped.noRevive = true;
         const ns = this.state.npcs.get(ped.id);
         if (ns) {
           ns.x = ped.x;
@@ -865,6 +881,7 @@ export class ParisRoom extends Room<GameState> {
       targetId: '',
       fireCd: 0,
       deployed: false,
+      noRevive: true, // dispatched heat doesn't repopulate the world
     };
   }
 
@@ -937,7 +954,8 @@ export class ParisRoom extends Room<GameState> {
     // Give up: target gone, no longer wanted, dead, or too far.
     if (!ps || !ps.alive || !this.isWanted(n.targetId) || d > 240) {
       n.dead = true;
-      n.respawnAt = Number.MAX_SAFE_INTEGER; // cops don't respawn
+      n.noRevive = true; // give up the chase and despawn (purged next tick)
+      n.respawnAt = tickNo;
       this.state.npcs.delete(n.id);
       return;
     }
@@ -953,8 +971,18 @@ export class ParisRoom extends Room<GameState> {
     n.fireCd -= DT;
     if (d < COP_FIRE_RANGE && n.fireCd <= 0) {
       n.fireCd = 0.8;
-      this.applyDamage('', n.targetId, COP_DAMAGE);
-      this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx: ps.x, tz: ps.z, hit: true, weaponId: 1 });
+      // Cops aren't crack shots — they miss a good share of the time.
+      const miss = Math.random() < 0.4;
+      let tx = ps.x;
+      let tz = ps.z;
+      if (miss) {
+        const off = (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 3.5);
+        tx = ps.x + (-dz / d) * off; // veer the shot sideways
+        tz = ps.z + (dx / d) * off;
+      } else {
+        this.applyDamage('', n.targetId, COP_DAMAGE);
+      }
+      this.broadcast(MSG.fireEvent, { ox: n.x, oz: n.z, tx, tz, hit: !miss, weaponId: 1 });
     }
     void tickNo;
   }
@@ -989,7 +1017,7 @@ export class ParisRoom extends Room<GameState> {
   private resolveCarCollisions() {
     const R = CAR.radius;
     const min = R * 2;
-    interface C { x: number; z: number; set: (x: number, z: number) => void }
+    interface C { x: number; z: number; set: (x: number, z: number) => void; slow: () => void }
     const list: C[] = [];
 
     for (const [vid, v] of this.state.vehicles) {
@@ -1004,10 +1032,13 @@ export class ParisRoom extends Room<GameState> {
           v.x = x;
           v.z = z;
         },
+        slow: () => {
+          if (!v.driverId) car.speed *= 0.5; // only nudge driverless cars
+        },
       });
     }
     for (const n of this.npcSims) {
-      if (n.dead || n.kind !== NPC_CAR) continue;
+      if (n.dead || (n.kind !== NPC_CAR && n.kind !== NPC_POLICE && n.kind !== NPC_TANK)) continue;
       list.push({
         x: n.x,
         z: n.z,
@@ -1019,6 +1050,9 @@ export class ParisRoom extends Room<GameState> {
             ns.x = x;
             ns.z = z;
           }
+        },
+        slow: () => {
+          n.speed *= 0.35; // back off instead of grinding into the car ahead
         },
       });
     }
@@ -1045,6 +1079,8 @@ export class ParisRoom extends Room<GameState> {
           b.z += dz * push;
           a.set(a.x, a.z);
           b.set(b.x, b.z);
+          a.slow();
+          b.slow();
         }
       }
     }

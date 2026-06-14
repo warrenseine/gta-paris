@@ -5,8 +5,10 @@ import {
   stepFoot,
   stepCar,
   weapon,
+  overWater,
   PLAYER,
   MSG,
+  TANK_MAX_SPEED,
   type CityData,
   type FootState,
   type CarState,
@@ -168,6 +170,12 @@ export class Game {
     return this.local ? this.local.alive : true;
   }
 
+  /** World for the car predictor — tanks get a lower speed cap. */
+  private carWorld(): MoveWorld & { maxSpeed?: number } {
+    const isTank = this.drivingId != null && this.entities.vehicleStates.get(this.drivingId)?.kind === 2;
+    return isTank ? { ...this.world, maxSpeed: TANK_MAX_SPEED } : this.world;
+  }
+
   private onLocal(p: LocalPlayerFields) {
     const wasAlive = this.local?.alive ?? true;
     this.local = p;
@@ -195,7 +203,7 @@ export class Game {
 
     if (this.drivingId && this.carPred) {
       const v = this.entities.vehicleStates.get(this.drivingId);
-      if (v) this.carPred.reconcile({ x: v.x, z: v.z, rotY: v.rotY, speed: v.speed }, p.seq, 1 / 30, this.world);
+      if (v) this.carPred.reconcile({ x: v.x, z: v.z, rotY: v.rotY, speed: v.speed }, p.seq, 1 / 30, this.carWorld());
     } else {
       this.footPred.reconcile(
         { x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY, stamina: p.stamina },
@@ -223,7 +231,7 @@ export class Game {
       return; // frozen while dead; server respawns us
     }
 
-    if (this.drivingId && this.carPred) this.carPred.predict(cmd, dt, this.world);
+    if (this.drivingId && this.carPred) this.carPred.predict(cmd, dt, this.carWorld());
     else this.footPred.predict(cmd, dt, this.world);
     this.conn.sendInput(cmd);
 
@@ -353,7 +361,8 @@ export class Game {
       camZ = this.footPred.renderZAt(alpha);
       this.playerMesh.rotation.y = this.footPred.renderRotAt(alpha);
       this.playerMesh.visible = !dead;
-      if (this.footPred.state.swimming) {
+      const swimming = !!(this.world.water && overWater(camX, camZ, this.world.water));
+      if (swimming) {
         this.playerMesh.position.set(camX, -0.55, camZ); // mostly submerged
         this.playerMesh.rotation.x = -1.3; // lie prone in the water
         animateSwim(this.playerMesh, frameDt);

@@ -30,6 +30,7 @@ export interface CarWorld {
   trees?: Vec2[];
   boundary?: Vec2[];
   water?: WaterField; // the Seine — driving in kills the engine (car sinks)
+  maxSpeed?: number; // per-vehicle cap (tanks are slower than cars)
 }
 
 const TREE_RADIUS = 1.1;
@@ -44,6 +45,7 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
   let speed = s.speed;
   let rotY = s.rotY;
   const il = Math.hypot(input.moveX, input.moveZ);
+  const maxSpeed = world.maxSpeed ?? CAR.maxSpeed;
 
   if (il > 0.15) {
     const target = Math.atan2(input.moveX, input.moveZ);
@@ -51,7 +53,7 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
 
-    const speedFrac = clamp(speed / CAR.maxSpeed, 0, 1);
+    const speedFrac = clamp(speed / maxSpeed, 0, 1);
     const turn = CAR.turnRate * (1 - 0.45 * speedFrac) * dt;
     rotY += clamp(diff, -turn, turn);
 
@@ -66,7 +68,7 @@ export function stepCar(s: CarState, input: InputCommand, dt: number, world: Car
   if (input.handbrake) speed *= Math.max(0, 1 - 5 * dt);
   speed -= speed * CAR.drag * dt;
   speed -= CAR.rollingResist * dt;
-  speed = clamp(speed, 0, CAR.maxSpeed);
+  speed = clamp(speed, 0, maxSpeed);
   if (speed < 0.05) speed = 0;
 
   let x = s.x + Math.sin(rotY) * speed * dt;

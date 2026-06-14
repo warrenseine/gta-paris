@@ -206,6 +206,28 @@ function montparnasse(): THREE.Group {
   return g;
 }
 
+function parcdesprinces(): THREE.Group {
+  const g = new THREE.Group();
+  // Oval stadium: a green pitch ringed by a raked grandstand wall.
+  const pitch = new THREE.Mesh(new THREE.CircleGeometry(1, 28), flat(0x3f7a3a));
+  pitch.scale.set(30, 20, 1);
+  pitch.rotation.x = -Math.PI / 2;
+  pitch.position.y = 0.2;
+  g.add(pitch);
+  // Stand ring: a torus flattened into an oval bowl.
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.32, 8, 28), flat(0xcdd2d8));
+  ring.scale.set(33, 22, 9);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 7;
+  g.add(ring);
+  // Outer wall.
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 9, 28, 1, true), flat(0xb7bcc4));
+  wall.scale.set(34, 1, 23);
+  wall.position.y = 4.5;
+  g.add(wall);
+  return g;
+}
+
 const BUILDERS: Record<string, () => THREE.Group> = {
   eiffel,
   arcdetriomphe,
@@ -220,6 +242,7 @@ const BUILDERS: Record<string, () => THREE.Group> = {
   madeleine,
   grandpalais,
   montparnasse,
+  parcdesprinces,
 };
 
 export function buildLandmark(def: LandmarkDef): THREE.Group {

@@ -32,6 +32,7 @@ const LANDMARK_LABEL: Record<LandmarkKey, string> = {
   madeleine: 'Madeleine',
   grandpalais: 'Grand Palais',
   montparnasse: 'Montparnasse',
+  parcdesprinces: 'Parc des Princes',
 };
 
 // Semi-transparent live minimap. Corner mode follows the player zoomed in;
