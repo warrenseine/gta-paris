@@ -1,3 +1,5 @@
+import { type ControlScheme, getSettings, type KbLayout, setSettings } from './settings.js';
+
 // Random Paris/GTA-flavored nicknames. Combos kept <= 16 chars.
 const PREFIX = [
   'Baguette', 'Croissant', 'Escargot', 'Beret', 'Fromage', 'Mime', 'Pigeon',
@@ -13,8 +15,6 @@ const GEMS = [
   'Escarghost', 'Croque Mort', 'Vroom Vroom', 'Pigeon Pro', 'Beretta Bob',
   'Au Revoir', 'Quasi Motor', 'Brie-zy', 'Tour de Crime', 'Pépé Le Pew',
 ];
-
-import { getSettings, setSettings, type ControlScheme, type KbLayout } from './settings.js';
 
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
@@ -122,7 +122,9 @@ export function nicknameScreen(): Promise<string> {
     overlay.append(row, btn);
     document.body.appendChild(overlay);
 
+    let raf = 0;
     const go = () => {
+      cancelAnimationFrame(raf);
       const name = (input.value.trim() || randomName()).slice(0, 16);
       overlay.remove();
       resolve(name);
@@ -132,5 +134,47 @@ export function nicknameScreen(): Promise<string> {
       if (e.key === 'Enter') go();
     };
     setTimeout(() => input.focus(), 0);
+
+    // Gamepad navigation (the in-game InputManager isn't running yet here).
+    const focusables = () => Array.from(overlay.querySelectorAll('button')) as HTMLButtonElement[];
+    let focus = focusables().length - 1; // start on PLAY
+    let prev: boolean[] = [];
+    let lastNav = 0;
+    const paint = () => {
+      focusables().forEach((b, i) => {
+        b.style.outline = i === focus ? '3px solid #5fd0ff' : 'none';
+      });
+    };
+    paint();
+    const loop = () => {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pad: Gamepad | null = null;
+      for (const p of pads) if (p?.connected) pad = p;
+      if (pad) {
+        const gp = pad;
+        const f = focusables();
+        const down = (i: number) => gp.buttons[i]?.pressed ?? false;
+        const edge = (i: number) => down(i) && !prev[i];
+        const ax = pad.axes[0] ?? 0;
+        const ay = pad.axes[1] ?? 0;
+        const now = performance.now();
+        let d = 0;
+        if (edge(13) || edge(15) || ay > 0.6 || ax > 0.6) d = 1;
+        else if (edge(12) || edge(14) || ay < -0.6 || ax < -0.6) d = -1;
+        if (d && now - lastNav > 180) {
+          focus = (focus + d + f.length) % f.length;
+          lastNav = now;
+          paint();
+        }
+        if (edge(0)) {
+          f[focus]?.click(); // A activates
+          paint();
+        }
+        if (edge(9)) go(); // Start = play
+        prev = gp.buttons.map((b) => b.pressed);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
   });
 }
