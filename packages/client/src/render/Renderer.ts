@@ -29,7 +29,6 @@ export class Renderer {
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
@@ -74,10 +73,28 @@ export class Renderer {
     const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
     this.composer.addPass(smaa);
 
+    this.applyResolution(); // cap internal pixels (big screens stay fast)
     window.addEventListener('resize', this.onResize);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyO') this.setHighQuality(!this.highQuality);
     });
+  }
+
+  /**
+   * Cap the internal framebuffer to a pixel budget (~1080p) and upscale via CSS,
+   * so fullscreen on a 4K/Retina display doesn't render millions of extra pixels
+   * through the post-processing chain. Clamped to [0.75, min(DPR,2)].
+   */
+  private applyResolution() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const BUDGET = 2_100_000; // ~1920x1080 internal pixels
+    const cap = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.max(0.75, Math.min(cap, Math.sqrt(BUDGET / (w * h))));
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h);
+    this.composer.setPixelRatio(dpr);
+    this.composer.setSize(w, h);
   }
 
   /** Toggle the fancy pipeline (post + shadows) off for performance. */
@@ -99,8 +116,7 @@ export class Renderer {
   }
 
   private onResize = () => {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.applyResolution();
   };
 
   render(camera: THREE.Camera) {
