@@ -29,7 +29,7 @@ import { setBridges, bridgeY } from '../entities/bridgeLevel.js';
 import { HUD } from '../ui/HUD.js';
 import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
-import type { Connection } from '../net/Connection.js';
+import type { Connection, UdpSnapshot } from '../net/Connection.js';
 import { Predictor } from '../net/Predictor.js';
 import { EntityManager, type LocalPlayerFields } from '../entities/EntityManager.js';
 import { MapEditor } from '../editor/MapEditor.js';
@@ -62,6 +62,7 @@ export class Game {
   private fireCd = 0;
   private lastShot = 0;
   private smokeCd = 0;
+  private fps = 60;
   private lockedPos: { x: number; z: number } | null = null;
   private visor: HTMLDivElement;
   private tmpVec = new THREE.Vector3();
@@ -115,6 +116,7 @@ export class Game {
     this.renderer.scene.add(this.playerMesh);
 
     this.entities = new EntityManager(this.renderer.scene, conn, (p) => this.onLocal(p));
+    conn.onSnapshot = (snap) => this.applySnapshot(snap);
     this.minimap = new Minimap(this.city);
     this.editor = new MapEditor(this.renderer.scene, this.renderer.renderer, this.city, [
       this.cityRenderer.group,
@@ -219,10 +221,26 @@ export class Game {
     if (this.drivingId && this.carPred) {
       const v = this.entities.vehicleStates.get(this.drivingId);
       if (v) this.carPred.reconcile({ x: v.x, z: v.z, rotY: v.rotY, speed: v.speed }, p.seq, 1 / 30, this.carWorld());
-    } else {
+    } else if (!this.conn.udpActive) {
+      // On-foot reconcile from the reliable WS state — unless faster UDP
+      // snapshots are driving it (see applySnapshot).
       this.footPred.reconcile(
         { x: p.x, z: p.z, vx: p.vx, vz: p.vz, rotY: p.rotY, stamina: p.stamina },
         p.seq,
+        1 / 30,
+        this.world,
+      );
+    }
+  }
+
+  /** UDP snapshot: fresher positions for everyone + faster on-foot reconcile. */
+  private applySnapshot(snap: UdpSnapshot) {
+    for (const [id, x, z, rotY] of snap.e) this.entities.pushFromUdp(id, x, z, rotY);
+    const s = snap.self;
+    if (s && this.alive && !this.drivingId) {
+      this.footPred.reconcile(
+        { x: s.x, z: s.z, vx: s.vx, vz: s.vz, rotY: s.rotY, stamina: s.stamina },
+        s.seq,
         1 / 30,
         this.world,
       );
@@ -435,6 +453,8 @@ export class Game {
     this.renderer.setFocus(camX, camZ); // keep shadows centred on the player
     this.updateMinimap();
     this.updateHud(dead);
+    if (frameDt > 0) this.fps += (1 / frameDt - this.fps) * 0.1;
+    this.hud.setPerf(`${this.fps | 0} fps · ${this.conn.ping}ms ${this.conn.transport}`);
     this.renderer.render(this.cam.camera);
   }
 

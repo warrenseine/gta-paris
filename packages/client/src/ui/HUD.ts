@@ -29,6 +29,7 @@ export class HUD {
   private score: HTMLDivElement;
   private wanted: HTMLDivElement;
   private hint: HTMLDivElement;
+  private perf: HTMLDivElement;
   private killfeed: HTMLDivElement;
   private overlay: HTMLDivElement;
   private board: HTMLDivElement;
@@ -53,6 +54,10 @@ export class HUD {
     this.hint = this.panel(
       'left:50%;transform:translateX(-50%);bottom:18px;font-size:14px;opacity:.85;text-align:center;',
     );
+    this.perf = this.panel('left:14px;top:12px;font:12px ui-monospace,monospace;opacity:.75;');
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyI') this.perf.style.display = this.perf.style.display === 'none' ? 'block' : 'none';
+    });
     this.killfeed = this.panel('right:18px;top:44px;font-size:14px;text-align:right;line-height:1.5;');
     this.overlay = this.panel(
       'inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;' +
@@ -95,6 +100,10 @@ export class HUD {
     } else {
       this.overlay.style.display = 'none';
     }
+  }
+
+  setPerf(line: string) {
+    this.perf.textContent = line;
   }
 
   setKillfeed(lines: { killer: string; victim: string }[]) {

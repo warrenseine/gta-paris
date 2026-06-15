@@ -38,7 +38,7 @@ import {
   NPC_TANK,
   type NpcSimState,
 } from '../sim/NpcSim.js';
-import { registerUdpInput, unregisterUdpInput } from '../net/udp.js';
+import { registerUdpInput, unregisterUdpInput, hasUdpChannel, sendSnapshot } from '../net/udp.js';
 
 export class PlayerState extends Schema {
   @type('string') id = '';
@@ -229,6 +229,7 @@ export class ParisRoom extends Room<GameState> {
     });
 
     this.onMessage(MSG.fire, (client, msg: FireMessage) => this.handleFire(client, msg));
+    this.onMessage('png', (client, t) => client.send('pong', t)); // WS ping echo for the net HUD
 
     console.log('[gta-paris] ParisRoom created, authoritative sim @', TICK_RATE, 'Hz');
   }
@@ -1309,27 +1310,43 @@ export class ParisRoom extends Room<GameState> {
 
   private updateInterest() {
     const R2 = INTEREST_RADIUS * INTEREST_RADIUS;
+    const tick = this.state.serverTick;
+    const r1 = (n: number) => Math.round(n * 10) / 10; // shrink the UDP payload
     for (const client of this.clients) {
       const v = client.view;
       const self = this.state.players.get(client.sessionId);
       if (!v || !self) continue;
+      const udp = hasUdpChannel(client.sessionId);
+      const ents: [string, number, number, number][] = [];
+
       for (const [id, p] of this.state.players) {
         const near = id === client.sessionId || sq(p.x - self.x, p.z - self.z) < R2;
         const has = v.has(p);
         if (near && !has) v.add(p);
         else if (!near && has) v.remove(p);
+        if (udp && near && id !== client.sessionId) ents.push([id, r1(p.x), r1(p.z), r1(p.rotY)]);
       }
       for (const [vid, veh] of this.state.vehicles) {
         const near = self.vehicleId === vid || sq(veh.x - self.x, veh.z - self.z) < R2;
         const has = v.has(veh);
         if (near && !has) v.add(veh);
         else if (!near && has) v.remove(veh);
+        if (udp && near) ents.push([vid, r1(veh.x), r1(veh.z), r1(veh.rotY)]);
       }
-      for (const [, npc] of this.state.npcs) {
+      for (const [id, npc] of this.state.npcs) {
         const near = sq(npc.x - self.x, npc.z - self.z) < R2;
         const has = v.has(npc);
         if (near && !has) v.add(npc);
         else if (!near && has) v.remove(npc);
+        if (udp && near && !npc.dead) ents.push([id, r1(npc.x), r1(npc.z), r1(npc.rotY)]);
+      }
+
+      if (udp) {
+        sendSnapshot(client.sessionId, {
+          t: tick,
+          self: { x: self.x, z: self.z, vx: self.vx, vz: self.vz, rotY: self.rotY, stamina: self.stamina, seq: self.lastProcessedInputSeq, alive: self.alive, vehicleId: self.vehicleId },
+          e: ents,
+        });
       }
     }
   }

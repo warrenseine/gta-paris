@@ -7,6 +7,8 @@ import type { InputCommand } from '@gta/shared';
 
 type InputCb = (cmd: InputCommand) => void;
 const inputHandlers = new Map<string, InputCb>();
+// Open datachannels keyed by Colyseus sessionId, for pushing snapshots down.
+const channels = new Map<string, { emit: (event: string, data: unknown) => void }>();
 
 /** ParisRoom registers a per-player input sink (same path as the WS MSG.input). */
 export function registerUdpInput(sessionId: string, cb: InputCb) {
@@ -14,6 +16,16 @@ export function registerUdpInput(sessionId: string, cb: InputCb) {
 }
 export function unregisterUdpInput(sessionId: string) {
   inputHandlers.delete(sessionId);
+}
+
+/** True if this session has a live datachannel (so the server should stream UDP). */
+export function hasUdpChannel(sessionId: string): boolean {
+  return channels.has(sessionId);
+}
+
+/** Push an unreliable position snapshot down the datachannel, if connected. */
+export function sendSnapshot(sessionId: string, data: unknown) {
+  channels.get(sessionId)?.emit('snapshot', data);
 }
 
 // UDP port range for the datachannels — must be opened in the firewall/Security
@@ -28,17 +40,23 @@ export async function setupUdp(httpServer: HttpServer): Promise<void> {
     io.addServer(httpServer);
     io.onConnection((channel) => {
       channel.onDisconnect(() => {
-        /* channel maps to a session via auth; nothing to free here */
+        const sid = channel.userData.sessionId as string | undefined;
+        if (sid) channels.delete(sid);
       });
       // Client announces which Colyseus session this channel belongs to.
       channel.on('auth', (sessionId: unknown) => {
-        if (typeof sessionId === 'string') channel.userData.sessionId = sessionId;
+        if (typeof sessionId === 'string') {
+          channel.userData.sessionId = sessionId;
+          channels.set(sessionId, channel as unknown as { emit: (e: string, d: unknown) => void });
+        }
       });
       // Unreliable movement input → route into that player's sim queue.
       channel.on('input', (data: unknown) => {
         const sid = channel.userData.sessionId as string | undefined;
         if (sid) inputHandlers.get(sid)?.(data as InputCommand);
       });
+      // Round-trip ping for the in-game net readout.
+      channel.on('ping', (t) => channel.emit('pong', t));
     });
     console.log(`[gta-paris] WebRTC (geckos) input channel up, UDP ${UDP_MIN}-${UDP_MAX}`);
   } catch (err) {

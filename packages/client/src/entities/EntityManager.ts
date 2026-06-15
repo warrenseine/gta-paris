@@ -48,7 +48,7 @@ export class EntityManager {
 
   constructor(
     private scene: THREE.Scene,
-    conn: Connection,
+    private conn: Connection,
     private onLocal: (p: LocalPlayerFields) => void,
   ) {
     const $ = conn.$;
@@ -84,7 +84,7 @@ export class EntityManager {
       $(player).onChange(() => {
         // Hide remote avatar while driving (car represents them) or dead.
         rp.mesh.visible = !player.vehicleId && player.alive;
-        rp.interp.push(player.x, player.z, player.rotY, performance.now());
+        if (!this.conn.udpActive) rp.interp.push(player.x, player.z, player.rotY, performance.now());
       });
     });
 
@@ -109,7 +109,7 @@ export class EntityManager {
           kind: v.kind,
           hp: v.hp,
         });
-        ve.interp.push(v.x, v.z, v.rotY, performance.now());
+        if (!this.conn.udpActive) ve.interp.push(v.x, v.z, v.rotY, performance.now());
       };
       sync();
       $(v).onChange(sync);
@@ -128,7 +128,7 @@ export class EntityManager {
       ne.mesh.rotation.y = npc.rotY;
       $(npc).onChange(() => {
         ne.setDead(npc.dead);
-        if (!npc.dead) ne.interp.push(npc.x, npc.z, npc.rotY, performance.now());
+        if (!npc.dead && !this.conn.udpActive) ne.interp.push(npc.x, npc.z, npc.rotY, performance.now());
       });
     });
     $(state).npcs.onRemove((_npc: any, id: string) => {
@@ -159,6 +159,23 @@ export class EntityManager {
       m.rotation.y += 0.03;
       m.position.y = 0.8 + Math.sin(t * 0.004 + m.position.x) * 0.12;
     }
+  }
+
+  /** Feed an entity's position from a UDP snapshot into its interpolation buffer. */
+  pushFromUdp(id: string, x: number, z: number, rotY: number) {
+    const now = performance.now();
+    const rp = this.remotes.get(id);
+    if (rp) {
+      rp.interp.push(x, z, rotY, now);
+      return;
+    }
+    const ve = this.vehicles.get(id);
+    if (ve) {
+      ve.interp.push(x, z, rotY, now);
+      return;
+    }
+    const ne = this.npcs.get(id);
+    if (ne && !ne.dead) ne.interp.push(x, z, rotY, now);
   }
 
   update(now: number, skipVehicleId: string | null) {
