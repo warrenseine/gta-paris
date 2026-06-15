@@ -42,8 +42,8 @@ export interface NpcSimState {
 export const PED_HP = 20;
 export const CAR_HP = 70;
 
-const PED_COUNT = 150;
-const TRAFFIC_COUNT = 18; // fewer cars → less gridlock at intersections
+const PED_COUNT = 90; // trimmed for free-tier CPU headroom (steady tick = less jitter)
+const TRAFFIC_COUNT = 12; // fewer cars → less gridlock + lighter sim
 const POLICE_COUNT = 4;
 const PED_SPEED = 1.6;
 const PED_RADIUS = 0.4;

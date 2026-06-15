@@ -4,6 +4,7 @@ services:
   - type: web
     name: gta-paris
     runtime: docker
+    region: frankfurt # keep the server near players — low latency = no rubberbanding
     plan: free # sleeps after 15 min idle; client retries through cold start
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
