@@ -3,16 +3,20 @@
 # install Docker, open the OS firewall for HTTP/HTTPS. Run as a sudo user.
 set -euo pipefail
 
-echo "==> Installing Docker engine + compose plugin"
-sudo apt-get update
+echo "==> Adding swap if RAM < ~1.8GB (the client build can OOM on 1GB boxes)"
+mem=$(free -m | awk '/^Mem:/{print $2}')
+if [ "${mem:-0}" -lt 1800 ] && [ ! -e /swapfile ]; then
+  sudo fallocate -l 2G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+fi
+
+echo "==> Installing Docker (official script — handles new/odd Ubuntu releases)"
+sudo apt-get update -y
 sudo apt-get install -y ca-certificates curl git
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" |
-  sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"
 
 # OS firewall: Scaleway/OVH/Hetzner Ubuntu images don't block inbound by
