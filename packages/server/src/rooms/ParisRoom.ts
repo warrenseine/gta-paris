@@ -139,7 +139,9 @@ const PICKUP_RESPAWN_TICKS = 8 * TICK_RATE;
 const PICKUP_RADIUS = 1.6;
 const ENTER_COOLDOWN_TICKS = Math.ceil(0.5 * TICK_RATE); // debounce car enter/exit
 const CORPSE_TICKS = 7 * TICK_RATE; // how long a dead ped stays on the ground
-const STAR_DECAY_TICKS = 22 * TICK_RATE; // time to shed ONE star while evading
+const STAR_DECAY_TICKS = 22 * TICK_RATE; // time to shed HEAT_DECAY heat while evading
+const HEAT_THRESHOLDS = [2, 5, 9, 14, 20]; // heat needed for 1..5 stars (several kills per star)
+const HEAT_DECAY = 4; // heat shed per STAR_DECAY_TICKS of no crime
 const POLICE_SIGHT = 130; // police notice gunfire within this range
 const COP_FIRE_RANGE = 45;
 const COP_DAMAGE = 10;
@@ -164,8 +166,9 @@ export class ParisRoom extends Room<GameState> {
   private trafficCounter = 0;
   private carDispatch = new Map<string, number>(); // playerId -> next tick we may pop a car
   private carTouching = new Set<string>(); // vehicleIds currently in wall contact (edge-trigger crashes)
-  // playerId -> wanted level (1..5) + tick the heat expires.
-  private stars = new Map<string, { n: number; until: number }>();
+  // playerId -> accumulated heat. Stars derive from heat (HEAT_THRESHOLDS);
+  // citizen crime caps at 3 stars, cop crime (cop flag) unlocks up to 5.
+  private stars = new Map<string, { heat: number; cop: boolean; until: number }>();
 
   private addNpcState(n: NpcSimState) {
     const ns = new NpcState();
@@ -411,8 +414,8 @@ export class ParisRoom extends Room<GameState> {
     this.carHp.set(vid, kind === 2 ? 320 : CAR_MAX_HP);
     ps.vehicleId = vid;
     // Stealing the law is a crime — instant heat.
-    if (kind === 1) this.addStars(id, 1);
-    if (kind === 2) this.addStars(id, 3);
+    if (kind === 1) this.addHeat(id, 3, true); // stealing the law
+    if (kind === 2) this.addHeat(id, 6, true); // stealing a tank
     // Retire the NPC (regenerates later for traffic; dispatched units don't).
     npc.dead = true;
     npc.respawnAt = npc.kind === NPC_CAR ? this.state.serverTick + 14 * TICK_RATE : Number.MAX_SAFE_INTEGER;
@@ -468,17 +471,31 @@ export class ParisRoom extends Room<GameState> {
     for (const n of this.npcSims) {
       if (n.dead || (n.kind !== NPC_POLICE && n.kind !== NPC_COP && n.kind !== NPC_TANK)) continue;
       if (Math.hypot(n.x - shooter.x, n.z - shooter.z) < POLICE_SIGHT) {
-        this.addStars(client.sessionId, 1);
+        this.addHeat(client.sessionId, 1, false); // firing near the law (citizen-capped)
         break;
       }
     }
 
     if (isTank) {
-      // Lob a shell: find the first thing the aim line hits, blow it up there.
-      const impact = castRay(msg.ox, msg.oz, msg.dx, msg.dz, w.range, [], this.city.buildings);
+      // Detonate the shell on the FIRST thing the aim line hits (person, car or
+      // building), not at max range — and one-shot it. Build hit targets first.
+      const targets: HitTarget[] = [];
+      for (const [id, p] of this.state.players) {
+        if (id === client.sessionId || !p.alive || p.vehicleId) continue;
+        targets.push({ id, x: p.x, z: p.z, r: 0.8 });
+      }
+      for (const n of this.npcSims) {
+        if (n.dead) continue;
+        targets.push({ id: n.id, x: n.x, z: n.z, r: n.kind === NPC_CAR || n.kind === NPC_TANK ? 2 : 0.9 });
+      }
+      for (const [vid, v] of this.state.vehicles) {
+        if (vid === shooter.vehicleId) continue;
+        targets.push({ id: vid, x: v.x, z: v.z, r: 2 });
+      }
+      const impact = castRay(msg.ox, msg.oz, msg.dx, msg.dz, w.range, targets, this.city.buildings);
       const ix = impact ? impact.x : msg.ox + msg.dx * w.range;
       const iz = impact ? impact.z : msg.oz + msg.dz * w.range;
-      this.explodeAt(ix, iz, client.sessionId);
+      this.explodeAt(ix, iz, client.sessionId, 9999); // player tank one-shots everything in the blast
       this.broadcast(MSG.fireEvent, { ox: msg.ox, oz: msg.oz, tx: ix, tz: iz, hit: true, weaponId: SHELL.weaponId });
       return;
     }
@@ -542,11 +559,12 @@ export class ParisRoom extends Room<GameState> {
       if (npc.hp <= 0) {
         npc.dead = true;
         const ns = this.state.npcs.get(npc.id);
-        // Killing the law raises heat (cops worth more than a squad car).
+        // Heat: citizens raise it (capped at 3 stars); cops/squad cars are cop
+        // crimes that unlock up to 5. Several kills per star.
         if (this.state.players.has(killerId)) {
-          if (npc.kind === NPC_COP) this.addStars(killerId, 2);
-          else if (npc.kind === NPC_POLICE) this.addStars(killerId, 1);
-          else if (npc.kind === NPC_TANK) this.addStars(killerId, 2);
+          if (npc.kind === NPC_COP) this.addHeat(killerId, 3, true);
+          else if (npc.kind === NPC_POLICE) this.addHeat(killerId, 3, true);
+          else if (npc.kind === NPC_PED) this.addHeat(killerId, 1.5, false);
         }
         if (npc.kind === NPC_CAR || npc.kind === NPC_POLICE || npc.kind === NPC_TANK) {
           this.broadcast(MSG.explosion, { x: npc.x, z: npc.z });
@@ -576,7 +594,7 @@ export class ParisRoom extends Room<GameState> {
   }
 
   /** Tank shell blast: area damage to players, vehicles and NPCs around a point. */
-  private explodeAt(x: number, z: number, killerId: string) {
+  private explodeAt(x: number, z: number, killerId: string, dmg = SHELL.damage) {
     this.broadcast(MSG.explosion, { x, z });
     const R = SHELL.radius;
     const kv = this.state.players.get(killerId)?.vehicleId;
@@ -584,18 +602,18 @@ export class ParisRoom extends Room<GameState> {
       if (!p.alive || p.vehicleId) continue; // in-car damage routed via the vehicle
       const d = Math.hypot(p.x - x, p.z - z);
       if (d > R) continue;
-      p.health -= SHELL.damage * (1 - d / R);
+      p.health -= dmg * (1 - d / R);
       if (p.health <= 0) this.killPlayer(pid, killerId);
     }
     for (const [vid, v] of this.state.vehicles) {
       if (vid === kv) continue; // not your own tank
       const d = Math.hypot(v.x - x, v.z - z);
-      if (d <= R) this.damageCar(vid, SHELL.damage * (1 - d / R), killerId);
+      if (d <= R) this.damageCar(vid, dmg * (1 - d / R), killerId);
     }
     for (const n of this.npcSims) {
       if (n.dead) continue;
       const d = Math.hypot(n.x - x, n.z - z);
-      if (d <= R) this.applyDamage(killerId, n.id, SHELL.damage * (1 - d / R));
+      if (d <= R) this.applyDamage(killerId, n.id, dmg * (1 - d / R));
     }
   }
 
@@ -818,6 +836,7 @@ export class ParisRoom extends Room<GameState> {
     }
 
     this.resolveCarCollisions();
+    this.tankCrush();
     this.resolveRunOver(tickNo);
     this.updatePickups(tickNo);
     this.decayStars(tickNo);
@@ -844,7 +863,7 @@ export class ParisRoom extends Room<GameState> {
         if (Math.hypot(ped.x - car.x, ped.z - car.z) > CAR.radius + 0.8) continue;
         // Vehicular manslaughter raises heat (mowing a cop earns more).
         if (car.driverId && this.state.players.has(car.driverId)) {
-          this.addStars(car.driverId, ped.kind === NPC_COP ? 2 : 1);
+          this.addHeat(car.driverId, ped.kind === NPC_COP ? 3 : 1.5, ped.kind === NPC_COP);
         }
         ped.dead = true;
         ped.x += Math.sin(car.rotY) * 5;
@@ -878,18 +897,22 @@ export class ParisRoom extends Room<GameState> {
     }
   }
 
-  /** Current wanted level. Stars fall off one at a time (see decayStars). */
+  /** Wanted level from accumulated heat; citizen crime caps at 3, cop crime at 5. */
   private starsOf(pid: string): number {
-    return this.stars.get(pid)?.n ?? 0;
+    const e = this.stars.get(pid);
+    if (!e) return 0;
+    let s = 0;
+    for (const t of HEAT_THRESHOLDS) if (e.heat >= t) s++;
+    return Math.min(s, e.cop ? 5 : 3);
   }
 
-  /** Shed one star per STAR_DECAY_TICKS of no fresh crime (gradual cooldown). */
+  /** Cool down: shed ~one star's worth of heat per STAR_DECAY_TICKS of no crime. */
   private decayStars(tickNo: number) {
     for (const [pid, e] of this.stars) {
       if (tickNo < e.until) continue;
-      e.n -= 1;
-      if (e.n <= 0) this.stars.delete(pid);
-      else e.until = tickNo + STAR_DECAY_TICKS;
+      e.heat -= HEAT_DECAY;
+      e.until = tickNo + STAR_DECAY_TICKS;
+      if (e.heat <= 0) this.stars.delete(pid);
     }
   }
 
@@ -897,17 +920,21 @@ export class ParisRoom extends Room<GameState> {
     return this.starsOf(pid) > 0;
   }
 
-  /** Raise a player's wanted level, refresh the heat timer, and dispatch heat. */
-  private addStars(pid: string, by: number) {
-    const cur = this.starsOf(pid);
-    const n = Math.min(5, cur + by);
-    if (n <= 0) return;
-    this.stars.set(pid, { n, until: this.state.serverTick + STAR_DECAY_TICKS });
+  /**
+   * Add heat for a crime. `pts` accumulate toward star thresholds (so it takes
+   * several kills per star); `copCrime` unlocks 4-5 stars (else capped at 3).
+   */
+  private addHeat(pid: string, pts: number, copCrime = false) {
+    const prev = this.starsOf(pid);
+    const e = this.stars.get(pid) ?? { heat: 0, cop: false, until: 0 };
+    e.heat += pts;
+    if (copCrime) e.cop = true;
+    e.until = this.state.serverTick + STAR_DECAY_TICKS;
+    this.stars.set(pid, e);
+    const now = this.starsOf(pid);
     const ps = this.state.players.get(pid);
-    if (!ps) return;
-    // Escalating response: extra patrol cars at 3+, an army tank at 5.
-    if (n > cur) {
-      for (let lvl = cur + 1; lvl <= n; lvl++) {
+    if (ps && now > prev) {
+      for (let lvl = prev + 1; lvl <= now; lvl++) {
         if (lvl >= 3) this.spawnPoliceNear(ps.x, ps.z);
         if (lvl >= 5) this.spawnTankNear(ps.x, ps.z, pid);
       }
@@ -1205,6 +1232,31 @@ export class ParisRoom extends Room<GameState> {
     this.npcSims.push(n);
     this.npcById.set(n.id, n);
     this.addNpcState(n);
+  }
+
+  /** Tanks flatten any car they touch (player vehicles + NPC traffic). */
+  private tankCrush() {
+    const tanks: { x: number; z: number; killer: string }[] = [];
+    for (const [vid, v] of this.state.vehicles) {
+      if (v.kind !== 2) continue;
+      const c = this.cars.get(vid);
+      if (c) tanks.push({ x: c.x, z: c.z, killer: v.driverId || vid });
+    }
+    for (const n of this.npcSims) {
+      if (!n.dead && n.kind === NPC_TANK) tanks.push({ x: n.x, z: n.z, killer: n.id });
+    }
+    if (!tanks.length) return;
+    const R = CAR.radius * 2.4; // crush reach
+    for (const t of tanks) {
+      for (const [vid, v] of this.state.vehicles) {
+        if (v.kind === 2) continue; // tanks don't crush tanks
+        if (Math.hypot(v.x - t.x, v.z - t.z) < R) this.damageCar(vid, 9999, t.killer);
+      }
+      for (const n of this.npcSims) {
+        if (n.dead || n.kind !== NPC_CAR) continue;
+        if (Math.hypot(n.x - t.x, n.z - t.z) < R) this.applyDamage(t.killer, n.id, 9999);
+      }
+    }
   }
 
   /** Server-side car-vs-car separation (player vehicles + NPC traffic). */
