@@ -2,6 +2,12 @@ import { resolveAgainstBuildings, clampToBounds, overWater, type CityData, type 
 
 let WATER: WaterField | null = null; // set on spawn — keeps peds out of the Seine
 
+// Road network for traffic: node (rounded endpoint) -> incident road polylines.
+// Lets cars pick a random connecting road at junctions instead of bouncing.
+type Pt = { x: number; z: number };
+let ROAD_ADJ = new Map<string, Pt[][]>();
+const nodeKey = (p: Pt) => `${Math.round(p.x)},${Math.round(p.z)}`;
+
 // Server-authoritative ambient NPCs: pedestrians wander, traffic follows the
 // boulevard polylines. NPCs are cosmetic (no collision with players) to keep
 // client-side prediction simple. Interest management caps how many sync.
@@ -119,6 +125,18 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
   const safe = city.roads.filter((r) => roadTrafficSafe(city, r));
   const driveRoads = safe.length ? safe : city.roads;
 
+  // Build the junction graph: each road endpoint -> the roads that touch it.
+  ROAD_ADJ = new Map();
+  for (const r of driveRoads) {
+    if (r.points.length < 2) continue;
+    for (const end of [r.points[0], r.points[r.points.length - 1]]) {
+      const k = nodeKey(end);
+      const list = ROAD_ADJ.get(k) ?? [];
+      list.push(r.points);
+      ROAD_ADJ.set(k, list);
+    }
+  }
+
   for (let i = 0; i < PED_COUNT; i++) {
     const p = walkablePoint(city);
     const t = walkablePoint(city);
@@ -145,12 +163,11 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
     });
   }
 
-  // Traffic: each car oscillates along one (water-safe) boulevard polyline.
+  // Traffic: each car drives the road network, choosing a random road at junctions.
   for (let i = 0; i < TRAFFIC_COUNT; i++) {
     const road = driveRoads[i % driveRoads.length];
-    const path = road.points.map((p) => ({ x: p.x, z: p.z }));
-    const startSeg = Math.floor(rand(0, Math.max(1, path.length - 1)));
-    const a = path[startSeg];
+    const start = Math.random() < 0.5 ? 0 : road.points.length - 1;
+    const a = road.points[start];
     npcs.push({
       id: `car${i}`,
       kind: NPC_CAR,
@@ -164,9 +181,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       tx: 0,
       tz: 0,
       repathAt: 0,
-      path,
-      seg: startSeg,
-      dir: Math.random() < 0.5 ? 1 : -1,
+      path: road.points,
+      seg: start === 0 ? road.points.length - 1 : 0, // head to the far end
+      dir: 1,
       speed: rand(10, 18),
       targetId: '',
       fireCd: 0,
@@ -174,11 +191,10 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
     });
   }
 
-  // Police cars roaming the boulevards.
+  // Police cars roaming the road network.
   for (let i = 0; i < POLICE_COUNT; i++) {
     const road = driveRoads[(i * 5 + 2) % driveRoads.length];
-    const path = road.points.map((p) => ({ x: p.x, z: p.z }));
-    const a = path[0];
+    const a = road.points[0];
     npcs.push({
       id: `police${i}`,
       kind: NPC_POLICE,
@@ -192,9 +208,9 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
       tx: 0,
       tz: 0,
       repathAt: 0,
-      path,
-      seg: 0,
-      dir: Math.random() < 0.5 ? 1 : -1,
+      path: road.points,
+      seg: road.points.length - 1,
+      dir: 1,
       speed: 14,
       targetId: '',
       fireCd: 0,
@@ -266,30 +282,36 @@ function stepPed(n: NpcSimState, dt: number, city: CityData, tick: number) {
   n.z = b.z;
 }
 
+// At a junction, pick a random connecting road (avoid an immediate U-turn);
+// dead-ends / off-graph paths just reverse.
+function chooseNextRoad(n: NpcSimState) {
+  const node = n.path[n.seg];
+  const opts = ROAD_ADJ.get(nodeKey(node)) ?? [];
+  const others = opts.filter((p) => p !== n.path);
+  const pickFrom = others.length ? others : opts.filter((p) => p === n.path);
+  if (pickFrom.length) {
+    const road = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+    n.path = road;
+    // Head toward the endpoint that ISN'T this junction.
+    const d0 = Math.hypot(road[0].x - node.x, road[0].z - node.z);
+    const d1 = Math.hypot(road[road.length - 1].x - node.x, road[road.length - 1].z - node.z);
+    n.seg = d0 <= d1 ? road.length - 1 : 0;
+  } else {
+    n.seg = n.seg === 0 ? n.path.length - 1 : 0; // off-graph: bounce
+  }
+}
+
 function stepCarNpc(n: NpcSimState, dt: number) {
   if (n.path.length < 2) return;
   // Resume cruising speed after yielding at a jam (collision damping slows us).
   const cruise = 14;
   if (n.speed < cruise) n.speed = Math.min(cruise, n.speed + 10 * dt);
-  let target = n.path[n.seg + n.dir];
-  if (!target) {
-    // Reached an end -> reverse.
-    n.dir *= -1;
-    target = n.path[n.seg + n.dir];
-    if (!target) return;
-  }
+  const target = n.path[n.seg] ?? n.path[0];
   const dx = target.x - n.x;
   const dz = target.z - n.z;
   const d = Math.hypot(dx, dz);
-  if (d < 1.5) {
-    n.seg += n.dir;
-    if (n.seg <= 0) {
-      n.seg = 0;
-      n.dir = 1;
-    } else if (n.seg >= n.path.length - 1) {
-      n.seg = n.path.length - 1;
-      n.dir = -1;
-    }
+  if (d < 2.5) {
+    chooseNextRoad(n); // reached a junction — turn onto a connecting road
     return;
   }
   const nx = dx / d;

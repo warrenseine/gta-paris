@@ -841,6 +841,7 @@ export class ParisRoom extends Room<GameState> {
     this.updatePickups(tickNo);
     this.decayStars(tickNo);
     this.ensureNearbyCars(tickNo);
+    this.relocateFarCars(tickNo);
     this.updateInterest();
     this.state.serverTick++;
   }
@@ -1174,8 +1175,40 @@ export class ParisRoom extends Room<GameState> {
         this.carDispatch.set(pid, tickNo + 1 * TICK_RATE); // retry soon
         continue;
       }
-      this.spawnTrafficCar(spot.road, spot.seg, spot.x, spot.z);
+      this.spawnTrafficCar(spot.road, spot.x, spot.z);
       this.carDispatch.set(pid, tickNo + 5 * TICK_RATE); // throttle
+    }
+  }
+
+  /** Teleport traffic cars stranded far from every player to a road near one,
+   *  beyond view, so the city stays lively around players. ~once a second. */
+  private relocateFarCars(tickNo: number) {
+    if (tickNo % TICK_RATE !== 0) return;
+    const players: PlayerState[] = [];
+    for (const [, p] of this.state.players) if (p.alive) players.push(p);
+    if (!players.length) return;
+    const FAR = 380; // well beyond the interest radius
+    let moved = 0;
+    for (const n of this.npcSims) {
+      if (moved >= 4) break; // spread the work
+      if (n.dead || n.kind !== NPC_CAR) continue;
+      let nearest = Infinity;
+      for (const p of players) nearest = Math.min(nearest, Math.hypot(p.x - n.x, p.z - n.z));
+      if (nearest <= FAR) continue;
+      const p = players[Math.floor(Math.random() * players.length)];
+      const spot = this.nearestRoadSpot(p.x, p.z, INTEREST_RADIUS + 10, 320); // out of view
+      if (!spot) continue;
+      n.x = spot.x;
+      n.z = spot.z;
+      n.path = spot.road.points;
+      n.seg = Math.random() < 0.5 ? 0 : spot.road.points.length - 1;
+      n.speed = 8;
+      const ns = this.state.npcs.get(n.id);
+      if (ns) {
+        ns.x = n.x;
+        ns.z = n.z;
+      }
+      moved++;
     }
   }
 
@@ -1207,7 +1240,7 @@ export class ParisRoom extends Room<GameState> {
     return best;
   }
 
-  private spawnTrafficCar(road: { points: { x: number; z: number }[] }, seg: number, x: number, z: number) {
+  private spawnTrafficCar(road: { points: { x: number; z: number }[] }, x: number, z: number) {
     const n: NpcSimState = {
       id: `traffic${this.trafficCounter++}`,
       kind: NPC_CAR,
@@ -1221,9 +1254,9 @@ export class ParisRoom extends Room<GameState> {
       tx: 0,
       tz: 0,
       repathAt: 0,
-      path: road.points.map((p) => ({ x: p.x, z: p.z })),
-      seg,
-      dir: Math.random() < 0.5 ? 1 : -1,
+      path: road.points, // real road array → road-graph identity works at junctions
+      seg: Math.random() < 0.5 ? 0 : road.points.length - 1,
+      dir: 1,
       speed: 8,
       targetId: '',
       fireCd: 0,
