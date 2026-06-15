@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time host setup for an Oracle Cloud Ampere A1 (Ubuntu) instance:
+# One-time host setup for an Ubuntu VPS (Scaleway / OVH / Hetzner / Oracle):
 # install Docker, open the OS firewall for HTTP/HTTPS. Run as a sudo user.
 set -euo pipefail
 
@@ -15,11 +15,15 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo usermod -aG docker "$USER"
 
-echo "==> Opening the OS firewall for 80/443 (Ubuntu images block these by default)"
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save 2>/dev/null || echo "(install iptables-persistent to persist firewall rules across reboots)"
+# OS firewall: Scaleway/OVH/Hetzner Ubuntu images don't block inbound by
+# default (you control access via the provider's Security Group). These ACCEPT
+# rules are harmless no-ops there, and open 80/443 on hosts that do filter
+# (e.g. Oracle). Best-effort.
+echo "==> Ensuring 80/443 are open at the OS level"
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+sudo netfilter-persistent save 2>/dev/null || true
 
 echo "==> Done. Log out/in (for the docker group), then:"
-echo "    DOMAIN=play.example.com docker compose -f deploy/oracle/docker-compose.yml up -d --build"
-echo "    Also add an ingress rule for TCP 80 + 443 in the Oracle VCN Security List."
+echo "    DOMAIN=your.domain docker compose -f deploy/vps/docker-compose.yml up -d --build"
+echo "    Make sure TCP 80 + 443 are allowed in your provider's Security Group."

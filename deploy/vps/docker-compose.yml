@@ -1,8 +1,8 @@
-# Oracle Cloud (Ampere A1, always-free) single-VM deploy.
+# Single-VM deploy for any Ubuntu VPS (Scaleway / OVH / Hetzner / Oracle...).
 # Caddy terminates TLS (auto Let's Encrypt) and reverse-proxies to the game
 # server (Express + Colyseus WebSocket) on one box. Always-on, no cold starts.
 #
-#   DOMAIN=play.example.com docker compose -f deploy/oracle/docker-compose.yml up -d --build
+#   DOMAIN=play.example.com docker compose -f deploy/vps/docker-compose.yml up -d --build
 services:
   app:
     build:
