@@ -9,6 +9,9 @@
 # Group: TCP 80, 443 and UDP 20000-20100. (Linux hosts only — fine for any VPS.)
 services:
   app:
+    # CI builds + pushes this image (GitHub Actions); the box just pulls it.
+    # `build` is kept for manual/local builds (docker compose up -d --build).
+    image: ghcr.io/warrenseine/gta-paris:latest
     build:
       context: ../.. # repo root (reuses the same Dockerfile as Render)
       dockerfile: Dockerfile

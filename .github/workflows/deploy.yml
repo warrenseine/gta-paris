@@ -1,0 +1,51 @@
+name: deploy
+# On push to master: build the image on GitHub's runners (fast, no OOM on the
+# tiny VPS), push to GHCR, then SSH to the box and pull + restart.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/warrenseine/gta-paris:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH pull + restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/gta-paris
+            git pull --ff-only
+            docker compose -f deploy/vps/docker-compose.yml pull
+            DOMAIN=${{ secrets.DEPLOY_DOMAIN }} docker compose -f deploy/vps/docker-compose.yml up -d
+            docker image prune -f

@@ -45,10 +45,30 @@ DOMAIN=51-15-20-30.nip.io docker compose -f deploy/vps/docker-compose.yml up -d 
 Caddy fetches a Let's Encrypt cert automatically. Open `https://<DOMAIN>`.
 
 ## 5. Updates
+Manual:
 ```bash
 git pull && DOMAIN=<your-domain> docker compose -f deploy/vps/docker-compose.yml up -d --build
 ```
 `restart: always` survives reboots. Always-on, so no keep-warm cron needed.
+
+## 6. Auto-deploy on push (GitHub Actions)
+`.github/workflows/deploy.yml` builds the image on GitHub's runners, pushes it to
+GHCR, then SSHes to the box to pull + restart (no heavy build on the 1 GB VPS).
+
+One-time setup:
+1. **Repo → Settings → Secrets and variables → Actions** — add:
+   - `DEPLOY_HOST` = the box IP (`163.172.170.201`)
+   - `DEPLOY_USER` = your SSH user (`root` or the sudo user)
+   - `DEPLOY_SSH_KEY` = a **private** SSH key whose public key is in the box's
+     `~/.ssh/authorized_keys` (generate a dedicated deploy key, don't reuse a personal one)
+   - `DEPLOY_DOMAIN` = your hostname (`163-172-170-201.nip.io`)
+2. After the first run, make the **GHCR package public** so the box pulls without
+   auth: GitHub → your profile → Packages → `gta-paris` → Package settings →
+   Change visibility → Public. (Or `docker login ghcr.io` on the box.)
+3. The box must already have the repo cloned at `~/gta-paris` (step 4).
+
+Every push to `master` now redeploys automatically; `workflow_dispatch` lets you
+trigger it by hand from the Actions tab.
 
 ## Notes
 - Same `Dockerfile` Render uses; `node:22-slim` is multi-arch (works on ARM VMs too).
