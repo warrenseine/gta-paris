@@ -2,11 +2,18 @@ import { resolveAgainstBuildings, clampToBounds, overWater, type CityData, type 
 
 let WATER: WaterField | null = null; // set on spawn — keeps peds out of the Seine
 
-// Road network for traffic: node (rounded endpoint) -> incident road polylines.
-// Lets cars pick a random connecting road at junctions instead of bouncing.
+// Road network for traffic: every drivable road end, so a car at a junction can
+// continue onto any nearby road end (even across a small gap), not just exact
+// shared nodes. Avoids U-turns unless truly nothing else is near.
 type Pt = { x: number; z: number };
-let ROAD_ADJ = new Map<string, Pt[][]>();
-const nodeKey = (p: Pt) => `${Math.round(p.x)},${Math.round(p.z)}`;
+interface RoadEnd {
+  road: Pt[];
+  x: number; // this end
+  z: number;
+  far: number; // index of the OTHER end (where the car heads next)
+}
+let ROAD_ENDS: RoadEnd[] = [];
+const JUNCTION_R = 32; // a car will cross to another road end within this many metres
 
 // Server-authoritative ambient NPCs: pedestrians wander, traffic follows the
 // boulevard polylines. NPCs are cosmetic (no collision with players) to keep
@@ -125,16 +132,13 @@ export function spawnNpcs(city: CityData): NpcSimState[] {
   const safe = city.roads.filter((r) => roadTrafficSafe(city, r));
   const driveRoads = safe.length ? safe : city.roads;
 
-  // Build the junction graph: each road endpoint -> the roads that touch it.
-  ROAD_ADJ = new Map();
+  // Index every drivable road's two ends for junction lookups.
+  ROAD_ENDS = [];
   for (const r of driveRoads) {
     if (r.points.length < 2) continue;
-    for (const end of [r.points[0], r.points[r.points.length - 1]]) {
-      const k = nodeKey(end);
-      const list = ROAD_ADJ.get(k) ?? [];
-      list.push(r.points);
-      ROAD_ADJ.set(k, list);
-    }
+    const last = r.points.length - 1;
+    ROAD_ENDS.push({ road: r.points, x: r.points[0].x, z: r.points[0].z, far: last });
+    ROAD_ENDS.push({ road: r.points, x: r.points[last].x, z: r.points[last].z, far: 0 });
   }
 
   for (let i = 0; i < PED_COUNT; i++) {
@@ -282,22 +286,21 @@ function stepPed(n: NpcSimState, dt: number, city: CityData, tick: number) {
   n.z = b.z;
 }
 
-// At a junction, pick a random connecting road (avoid an immediate U-turn);
-// dead-ends / off-graph paths just reverse.
+// At a junction, continue onto a random nearby road end (crossing a small gap
+// if needed). Only U-turn when nothing else is within reach.
 function chooseNextRoad(n: NpcSimState) {
   const node = n.path[n.seg];
-  const opts = ROAD_ADJ.get(nodeKey(node)) ?? [];
-  const others = opts.filter((p) => p !== n.path);
-  const pickFrom = others.length ? others : opts.filter((p) => p === n.path);
-  if (pickFrom.length) {
-    const road = pickFrom[Math.floor(Math.random() * pickFrom.length)];
-    n.path = road;
-    // Head toward the endpoint that ISN'T this junction.
-    const d0 = Math.hypot(road[0].x - node.x, road[0].z - node.z);
-    const d1 = Math.hypot(road[road.length - 1].x - node.x, road[road.length - 1].z - node.z);
-    n.seg = d0 <= d1 ? road.length - 1 : 0;
+  const cands: RoadEnd[] = [];
+  for (const e of ROAD_ENDS) {
+    if (e.road === n.path) continue; // not the road we're on
+    if (Math.hypot(e.x - node.x, e.z - node.z) <= JUNCTION_R) cands.push(e);
+  }
+  if (cands.length) {
+    const e = cands[Math.floor(Math.random() * cands.length)];
+    n.path = e.road;
+    n.seg = e.far; // head to that road's far end
   } else {
-    n.seg = n.seg === 0 ? n.path.length - 1 : 0; // off-graph: bounce
+    n.seg = n.seg === 0 ? n.path.length - 1 : 0; // nothing near: U-turn
   }
 }
 
