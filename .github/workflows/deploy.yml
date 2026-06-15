@@ -45,8 +45,9 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
+            export DOMAIN=${{ secrets.DEPLOY_DOMAIN }}
             cd ~/gta-paris
             git pull --ff-only
             docker compose -f deploy/vps/docker-compose.yml pull
-            DOMAIN=${{ secrets.DEPLOY_DOMAIN }} docker compose -f deploy/vps/docker-compose.yml up -d
+            docker compose -f deploy/vps/docker-compose.yml up -d
             docker image prune -f
