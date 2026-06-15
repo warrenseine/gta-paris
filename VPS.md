@@ -18,8 +18,13 @@ but the exact same deploy works on OVH or Hetzner (just create an Ubuntu VM ther
 
 ## 2. Open the network
 Scaleway → **Security Groups** for the instance: allow inbound **TCP 22, 80, 443**
-(default group is usually permissive; confirm 80/443 are allowed). No OS firewall
-tweaks needed on Scaleway — `setup.sh` handles the rest best-effort.
+and **UDP 20000–20100** (the WebRTC datachannel range). The default group is
+usually permissive; if you locked it down, add those. No OS firewall tweaks
+needed on Scaleway — `setup.sh` handles the rest best-effort.
+
+The WebRTC channel is **optional** — if UDP is blocked, the game still works over
+the WebSocket (just with TCP's head-of-line latency). Open the UDP range to get
+the low-latency input path.
 
 ## 3. TLS hostname
 Caddy needs a hostname to issue HTTPS (browsers require `wss://`). Two options:

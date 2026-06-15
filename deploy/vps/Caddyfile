@@ -1,5 +1,6 @@
 # Auto-HTTPS (Let's Encrypt) for $DOMAIN, proxying to the game server.
-# Caddy passes WebSocket upgrades through transparently.
+# Caddy passes WebSocket + geckos signaling through transparently.
+# Host networking → reach the app on localhost (no docker DNS).
 {$DOMAIN} {
-	reverse_proxy app:2567
+	reverse_proxy 127.0.0.1:2567
 }

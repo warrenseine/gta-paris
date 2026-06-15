@@ -38,6 +38,7 @@ import {
   NPC_TANK,
   type NpcSimState,
 } from '../sim/NpcSim.js';
+import { registerUdpInput, unregisterUdpInput } from '../net/udp.js';
 
 export class PlayerState extends Schema {
   @type('string') id = '';
@@ -298,6 +299,11 @@ export class ParisRoom extends Room<GameState> {
       respawnAtTick: 0,
     });
     client.view = new StateView();
+    // Accept movement input over the optional WebRTC channel too (same queue).
+    registerUdpInput(client.sessionId, (input) => {
+      const sim = this.sims.get(client.sessionId);
+      if (sim && sim.queue.length < 8) sim.queue.push(input);
+    });
     const sc = new ScoreEntry();
     sc.nickname = p.nickname;
     this.state.scores.set(client.sessionId, sc);
@@ -313,6 +319,7 @@ export class ParisRoom extends Room<GameState> {
     this.state.players.delete(client.sessionId);
     this.state.scores.delete(client.sessionId);
     this.sims.delete(client.sessionId);
+    unregisterUdpInput(client.sessionId);
   }
 
   private handleEnterExit(id: string, ps: PlayerState, sim: Sim) {

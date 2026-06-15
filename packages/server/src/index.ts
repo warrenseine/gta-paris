@@ -5,6 +5,7 @@ import express from 'express';
 import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { ParisRoom } from './rooms/ParisRoom.js';
+import { setupUdp } from './net/udp.js';
 
 const PORT = Number(process.env.PORT ?? 2567);
 
@@ -28,6 +29,7 @@ if (existsSync(clientDist)) {
 const httpServer = createServer(app);
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
 gameServer.define('paris', ParisRoom);
+void setupUdp(httpServer); // optional WebRTC input channel (falls back to WS)
 
 gameServer
   .listen(PORT)

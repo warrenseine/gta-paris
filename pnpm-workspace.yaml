@@ -5,6 +5,7 @@ allowBuilds:
   '@swc/core': true
   esbuild: true
   msgpackr-extract: true
+  node-datachannel: true
 
 blockExoticSubdeps: false
 neverBuiltDependencies: []
@@ -12,3 +13,4 @@ onlyBuiltDependencies:
   - esbuild
   - msgpackr-extract
   - '@swc/core'
+  - node-datachannel
