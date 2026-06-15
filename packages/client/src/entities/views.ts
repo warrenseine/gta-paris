@@ -164,14 +164,17 @@ export function makeTankMesh(): THREE.Group {
     track.position.set(sx * 1.7, 0.5, 0);
     g.add(track);
   }
-  // Turret + barrel.
-  const turret = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 2.4), flat(0x555c28));
-  turret.position.set(0, 1.7, -0.3);
-  g.add(turret);
+  // Turret + barrel in a subgroup that rotates to aim at the target.
+  const turret = new THREE.Group();
+  const cupola = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 2.4), flat(0x555c28));
+  cupola.position.set(0, 1.7, 0);
+  turret.add(cupola);
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 3.4, 8), flat(0x2f3416));
   barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 1.8, 1.8);
-  g.add(barrel);
+  barrel.position.set(0, 1.8, 2.1); // extends out the front of the turret
+  turret.add(barrel);
+  g.add(turret);
+  g.userData.turret = turret; // rotated by the renderer to face the target
   g.scale.setScalar(1.3); // a bit bigger / more imposing
   return g;
 }

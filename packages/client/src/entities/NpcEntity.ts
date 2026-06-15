@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Interpolation } from '../net/Interpolation.js';
 import { makePedMesh, makeCarMesh, makeCopMesh, makePoliceCarMesh, makeTankMesh, animateWalk } from './views.js';
 import { bridgeY } from './bridgeLevel.js';
+import { getLocalPos } from './localPos.js';
 import { COLORS } from '../render/materials.js';
 
 // Ambient NPC (ped or traffic car), interpolated like remote players.
@@ -51,6 +52,14 @@ export class NpcEntity {
     this.mesh.position.set(s.x, bridgeY(s.x, s.z), s.z);
     this.mesh.rotation.y = s.rotY;
     animateWalk(this.mesh, speed, dt);
+    // Tank turret tracks the local player.
+    if (this.kind === 4) {
+      const turret = this.mesh.userData.turret as THREE.Object3D | undefined;
+      if (turret) {
+        const lp = getLocalPos();
+        turret.rotation.y = Math.atan2(lp.x - s.x, lp.z - s.z) - s.rotY;
+      }
+    }
   }
 
   dispose(scene: THREE.Scene) {

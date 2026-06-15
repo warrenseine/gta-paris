@@ -26,6 +26,7 @@ import { COLORS } from '../render/materials.js';
 import { InputManager } from '../input/InputManager.js';
 import { makePlayerMesh, animateWalk, animateSwim } from '../entities/views.js';
 import { setBridges, bridgeY } from '../entities/bridgeLevel.js';
+import { setLocalPos } from '../entities/localPos.js';
 import { HUD } from '../ui/HUD.js';
 import { Minimap } from '../ui/Minimap.js';
 import { GameLoop } from './GameLoop.js';
@@ -378,6 +379,12 @@ export class Game {
       if (ve) {
         ve.mesh.position.set(camX, deckY, camZ);
         ve.mesh.rotation.y = rot;
+        // Tank turret tracks your aim (mouse / right stick).
+        const turret = ve.mesh.userData.turret as THREE.Object3D | undefined;
+        if (turret) {
+          const aim = this.aimDir();
+          turret.rotation.y = Math.atan2(aim.x, aim.z) - rot;
+        }
       }
       lookX = Math.sin(rot); // camera leads toward car heading
       lookZ = Math.cos(rot);
@@ -435,6 +442,7 @@ export class Game {
       this.updateAim();
     }
 
+    setLocalPos(camX, camZ); // NPC tank turrets aim here
     this.entities.update(performance.now(), this.drivingId);
     this.cityRenderer.update(frameDt);
     // Damaged cars (<50% hp) trail smoke.
