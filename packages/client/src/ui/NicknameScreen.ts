@@ -14,7 +14,46 @@ const GEMS = [
   'Au Revoir', 'Quasi Motor', 'Brie-zy', 'Tour de Crime', 'Pépé Le Pew',
 ];
 
+import { getSettings, setSettings, type ControlScheme, type KbLayout } from './settings.js';
+
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+
+// A two-option segmented toggle wired to a getter/setter.
+function segmented<T extends string>(
+  label: string,
+  choices: [T, string][],
+  get: () => T,
+  set: (v: T) => void,
+): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:13px;';
+  const cap = document.createElement('span');
+  cap.textContent = label;
+  cap.style.cssText = 'opacity:.7;width:84px;text-align:right;';
+  wrap.appendChild(cap);
+  const btns: HTMLButtonElement[] = [];
+  const paint = () => {
+    const cur = get();
+    btns.forEach((b, i) => {
+      const on = choices[i][0] === cur;
+      b.style.background = on ? '#ffcf4d' : '#1c2027';
+      b.style.color = on ? '#1a1d22' : '#fff';
+    });
+  };
+  for (const [val, text] of choices) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.style.cssText = 'padding:7px 14px;border:1px solid #333;border-radius:7px;cursor:pointer;';
+    b.onclick = () => {
+      set(val);
+      paint();
+    };
+    btns.push(b);
+    wrap.appendChild(b);
+  }
+  paint();
+  return wrap;
+}
 
 export function randomName(): string {
   const name = Math.random() < 0.4 ? pick(GEMS) : `${pick(PREFIX)} ${pick(SUFFIX)}`;
@@ -51,6 +90,30 @@ export function nicknameScreen(): Promise<string> {
       input.focus();
     };
     row.append(input, dice);
+
+    const options = document.createElement('div');
+    options.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:6px;';
+    options.append(
+      segmented<ControlScheme>(
+        'Controls',
+        [
+          ['modern', 'Modern (strafe)'],
+          ['classic', 'Classic (turn)'],
+        ],
+        () => getSettings().scheme,
+        (v) => setSettings({ scheme: v }),
+      ),
+      segmented<KbLayout>(
+        'Keyboard',
+        [
+          ['qwerty', 'QWERTY'],
+          ['azerty', 'AZERTY'],
+        ],
+        () => getSettings().layout,
+        (v) => setSettings({ layout: v }),
+      ),
+    );
+    overlay.appendChild(options);
 
     const btn = document.createElement('button');
     btn.textContent = 'PLAY';

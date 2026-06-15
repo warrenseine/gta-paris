@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { emptyInput, type InputCommand } from '@gta/shared';
+import { getSettings } from '../ui/settings.js';
+
+const CLASSIC_TURN = 3.2; // rad/s heading rotation in classic (turn-to-steer) mode
 
 const DEADZONE = 0.18;
 
@@ -15,8 +18,11 @@ export type LastDevice = 'kbm' | 'gamepad';
 // gamepad right-stick aim vector exactly (sim never branches on device).
 export class InputManager {
   private keys = new Set<string>();
+  private chars = new Set<string>(); // by e.key (layout-aware letters: w/z, a/q)
   /** One-shot key presses latched on keydown, consumed each sample. */
   private pressedOnce = new Set<string>();
+  private pressedOnceChar = new Set<string>();
+  private heading = 0; // classic-mode facing (rad), 0 = up-screen (-Z)
   private mouseDown = false;
   private mouseNdc = new THREE.Vector2(0, 0);
   private seq = 0;
@@ -32,11 +38,19 @@ export class InputManager {
 
   constructor(dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
-      if (!e.repeat) this.pressedOnce.add(e.code);
+      const c = e.key.toLowerCase();
+      if (!e.repeat) {
+        this.pressedOnce.add(e.code);
+        this.pressedOnceChar.add(c);
+      }
       this.keys.add(e.code);
+      this.chars.add(c);
       this.lastDevice = 'kbm';
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      this.chars.delete(e.key.toLowerCase());
+    });
     dom.addEventListener('mousemove', (e) => {
       this.mouseNdc.x = (e.clientX / window.innerWidth) * 2 - 1;
       this.mouseNdc.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -106,22 +120,38 @@ export class InputManager {
       if (pad.buttons[4]?.pressed) zoomOut = true; // L1 held = zoom out
     }
 
-    // Keyboard movement (additive; overrides if pressed).
+    // Keyboard movement (additive; overrides if pressed). Letters are read by
+    // e.key so the AZERTY ZQSD diamond matches its keycaps.
+    const azerty = getSettings().layout === 'azerty';
+    const fwd = azerty ? 'z' : 'w';
+    const left = azerty ? 'q' : 'a';
     let kx = 0;
     let kz = 0;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) kz -= 1; // up-screen = -Z
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) kz += 1;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) kx -= 1;
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) kx += 1;
+    if (this.chars.has(fwd) || this.keys.has('ArrowUp')) kz -= 1; // up-screen = -Z
+    if (this.chars.has('s') || this.keys.has('ArrowDown')) kz += 1;
+    if (this.chars.has(left) || this.keys.has('ArrowLeft')) kx -= 1;
+    if (this.chars.has('d') || this.keys.has('ArrowRight')) kx += 1;
     if (kx || kz) {
       mx = kx;
       mz = kz;
     }
     if (this.keys.has('ShiftLeft')) sprint = true;
     if (this.keys.has('Space')) handbrake = true;
-    if (this.pressedOnce.has('KeyF') || this.pressedOnce.has('KeyY')) enterExit = true; // one-shot
-    if (this.pressedOnce.has('KeyM')) mapToggle = true; // one-shot
+    if (this.pressedOnceChar.has('f') || this.pressedOnceChar.has('y')) enterExit = true; // one-shot
+    if (this.pressedOnceChar.has('m')) mapToggle = true; // one-shot
     if (this.mouseDown) fire = true;
+
+    // Classic (turn-to-steer) scheme: left/right rotate the heading, up/down =
+    // forward/back along it. Convert the raw intent into a world move vector;
+    // facing is the heading (set in the aim section below).
+    const classic = getSettings().scheme === 'classic';
+    if (classic) {
+      const turn = mx; // +right
+      const forward = -mz; // up = forward
+      this.heading += turn * CLASSIC_TURN * (1 / 30);
+      mx = Math.sin(this.heading) * forward;
+      mz = -Math.cos(this.heading) * forward;
+    }
 
     // Normalize move to unit disc.
     const ml = Math.hypot(mx, mz);
@@ -173,12 +203,27 @@ export class InputManager {
       cmd.lookZ = clamp1(-this.mouseNdc.y); // up-screen = -Z
     }
 
+    // Classic scheme: you always face your heading (keyboard-driven), so aim +
+    // camera lead follow it — no mouse aiming.
+    if (classic) {
+      const hx = Math.sin(this.heading);
+      const hz = -Math.cos(this.heading);
+      this.lastAimX = hx;
+      this.lastAimZ = hz;
+      cmd.aimX = hx;
+      cmd.aimZ = hz;
+      cmd.aiming = true;
+      cmd.lookX = hx;
+      cmd.lookZ = hz;
+    }
+
     // Vehicle controls now use moveX/moveZ directly (drive toward stick dir).
     cmd.throttle = -cmd.moveZ;
     cmd.steer = cmd.moveX;
 
     // Consume one-shot presses.
     this.pressedOnce.clear();
+    this.pressedOnceChar.clear();
 
     return cmd;
   }
