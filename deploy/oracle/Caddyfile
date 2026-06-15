@@ -1,0 +1,5 @@
+# Auto-HTTPS (Let's Encrypt) for $DOMAIN, proxying to the game server.
+# Caddy passes WebSocket upgrades through transparently.
+{$DOMAIN} {
+	reverse_proxy app:2567
+}

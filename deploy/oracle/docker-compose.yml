@@ -1,0 +1,35 @@
+# Oracle Cloud (Ampere A1, always-free) single-VM deploy.
+# Caddy terminates TLS (auto Let's Encrypt) and reverse-proxies to the game
+# server (Express + Colyseus WebSocket) on one box. Always-on, no cold starts.
+#
+#   DOMAIN=play.example.com docker compose -f deploy/oracle/docker-compose.yml up -d --build
+services:
+  app:
+    build:
+      context: ../.. # repo root (reuses the same Dockerfile as Render)
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=2567
+    expose:
+      - '2567'
+    restart: always
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - app
+    environment:
+      - DOMAIN=${DOMAIN:?set DOMAIN to your hostname, e.g. play.example.com}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:
