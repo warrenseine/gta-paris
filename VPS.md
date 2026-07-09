@@ -16,6 +16,32 @@ but the exact same deploy works on OVH or Hetzner (just create an Ubuntu VM ther
 - Image: **Ubuntu 22.04/24.04**.
 - A **public IP** (flexible IP) is assigned by default. Add your SSH key. Note the IP.
 
+### 1b. …or recreate from the CLI (one-shot)
+If the instance was deleted to stop billing, recreate the exact same box with `scw`:
+```bash
+# STARDUST1-S in Paris, Ubuntu 26.04, with a public IP + your SSH key already
+# uploaded to the project (Console ▸ SSH Keys, or `scw account ssh-key add`).
+scw instance server create \
+  type=STARDUST1-S \
+  zone=fr-par-1 \
+  image=ubuntu_noble \
+  root-volume=block:20GB \
+  ip=new \
+  name=gta-paris
+
+# Grab the new public IP (it CHANGES on recreate — update DNS / GitHub secrets):
+scw instance server list
+```
+Then continue at step 2. Because the IP changes, update the `DEPLOY_HOST` /
+`DEPLOY_DOMAIN` Actions secrets (step 6) and any DNS A record / DuckDNS entry.
+
+To tear it back down (stop **all** billing — server, block volume, and IP):
+```bash
+ID=$(scw instance server list -o json | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["id"])')
+scw instance server terminate $ID with-ip=true with-block=true
+scw instance ip list          # release any leftover (e.g. detached IPv6) with: scw instance ip delete <id>
+```
+
 ## 2. Open the network
 Scaleway → **Security Groups** for the instance: allow inbound **TCP 22, 80, 443**
 and **UDP 20000–20100** (the WebRTC datachannel range). The default group is
